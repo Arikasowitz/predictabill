@@ -45,17 +45,82 @@ function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
 function firstDay(y, m) { return new Date(y, m, 1).getDay(); }
 function totalFor(arr) { return arr.reduce((s, b) => s + (b.amount || 0), 0); }
 
-function UpdateModal({ bill, onSave, onClose }) {
+const APP_PASSWORD = "PredictaBill2024";
+
+function PasswordGate({ onUnlock }) {
   const [val, setVal] = useState("");
+  const [error, setError] = useState(false);
+
+  function attempt() {
+    if (val === APP_PASSWORD) {
+      onUnlock();
+    } else {
+      setError(true);
+      setVal("");
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight:"100vh", background:"#F2F4F8",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      padding:16,
+    }}>
+      <div style={{ background:"#fff", borderRadius:16, padding:36, width:"100%", maxWidth:340, boxShadow:"0 8px 40px rgba(0,0,0,0.10)", textAlign:"center" }}>
+        <div style={{ fontSize:15, fontWeight:900, color:"#3B5BDB", letterSpacing:"-0.3px", marginBottom:6 }}>
+          <span style={{ color:"#3B5BDB" }}>Predict</span>aBill
+        </div>
+        <div style={{ fontSize:22, fontWeight:900, marginBottom:4 }}>Welcome back</div>
+        <div style={{ fontSize:13, color:"#888", marginBottom:28 }}>Enter your password to continue</div>
+        <input
+          type="password"
+          placeholder="Password"
+          value={val}
+          onChange={e => { setVal(e.target.value); setError(false); }}
+          onKeyDown={e => e.key === "Enter" && attempt()}
+          style={{
+            width:"100%", padding:"12px 14px", borderRadius:10,
+            border: error ? "2px solid #C92A2A" : "2px solid #e0e0e0",
+            fontSize:16, marginBottom:10, boxSizing:"border-box",
+            outline:"none",
+          }}
+          autoFocus
+        />
+        {error && <div style={{ color:"#C92A2A", fontSize:12, fontWeight:700, marginBottom:10 }}>Incorrect password. Try again.</div>}
+        <button onClick={attempt} style={{
+          width:"100%", padding:"12px", borderRadius:10, border:"none",
+          background:"#3B5BDB", color:"#fff", fontWeight:800, fontSize:15,
+          cursor:"pointer", marginTop:4,
+        }}>Unlock</button>
+      </div>
+    </div>
+  );
+}
+
+
+  const [val, setVal] = useState(bill.amount ? String(bill.amount) : "");
+  const isFixed = !bill.variable;
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
       <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:340, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div style={{ fontSize:13, fontWeight:700, color:"#888", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>Update Amount</div>
-        <div style={{ fontSize:20, fontWeight:900, marginBottom:6 }}>{bill.name}</div>
-        <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>
-          📧 {bill.hint}
+        <div style={{ fontSize:13, fontWeight:700, color:"#888", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          {isFixed ? "Edit Fixed Bill" : "Update Amount"}
         </div>
-        <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:6 }}>Amount leaving your account this month</label>
+        <div style={{ fontSize:20, fontWeight:900, marginBottom:6 }}>{bill.name}</div>
+        {bill.hint && (
+          <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>
+            📧 {bill.hint}
+          </div>
+        )}
+        {isFixed && (
+          <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>
+            This change will apply to all future months.
+          </div>
+        )}
+        <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:6 }}>
+          {isFixed ? "New monthly amount" : "Amount leaving your account this month"}
+        </label>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24 }}>
           <span style={{ fontSize:20, fontWeight:700, color:"#333" }}>$</span>
           <input type="number" placeholder="0.00" value={val} onChange={e => setVal(e.target.value)} autoFocus
@@ -215,7 +280,10 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
                 {b.variable && !b.amount ? (
                   <button onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:6, padding:"6px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>Update</button>
                 ) : (
-                  <div style={{ fontWeight:900, fontSize:16 }}>{fmt(b.amount)}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ fontWeight:900, fontSize:16 }}>{fmt(b.amount)}</div>
+                    <button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"4px 8px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>
+                  </div>
                 )}
               </div>
             );
@@ -250,7 +318,10 @@ function ListView({ allBills, year, month, onUpdateVariable }) {
         {needsUpdate ? (
           <button onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontWeight:700, fontSize:13, cursor:"pointer" }}>+ Add</button>
         ) : (
-          <div style={{ fontWeight:900, fontSize:16 }}>{fmt(b.amount)}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ fontWeight:900, fontSize:16 }}>{fmt(b.amount)}</div>
+            <button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"4px 8px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>
+          </div>
         )}
       </div>
     );
@@ -545,10 +616,12 @@ function ReportView({ allBills, year, month }) {
 }
 
 export default function App() {
+  const [unlocked, setUnlocked] = useState(false);
   const [year, setYear] = useState(TODAY.getFullYear());
   const [month, setMonth] = useState(TODAY.getMonth());
   const [view, setView] = useState("calendar");
   const [variableAmounts, setVariableAmounts] = useState({});
+  const [fixedOverrides, setFixedOverrides] = useState({});
   const [extraBills, setExtraBills] = useState([]);
   const [updatingBill, setUpdatingBill] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -556,17 +629,21 @@ export default function App() {
   const monthKey = `${year}-${month}`;
 
   const allBills = useMemo(() => {
-    const fixed = FIXED_BILLS.map(b => ({ ...b, variable: false }));
+    const fixed = FIXED_BILLS.map(b => ({ ...b, variable: false, amount: fixedOverrides[b.id] ?? b.amount }));
     const variable = VARIABLE_BILLS.map(b => ({
       ...b, variable: true,
       amount: variableAmounts[`${monthKey}-${b.id}`] || 0,
     }));
     const extra = extraBills.filter(b => b.monthKey === monthKey).map(b => ({ ...b, variable: false }));
     return [...fixed, ...variable, ...extra];
-  }, [variableAmounts, extraBills, monthKey]);
+  }, [variableAmounts, fixedOverrides, extraBills, monthKey]);
 
   function saveVariableAmount(bill, amount) {
-    setVariableAmounts(v => ({ ...v, [`${monthKey}-${bill.id}`]: amount }));
+    if (!bill.variable) {
+      setFixedOverrides(f => ({ ...f, [bill.id]: amount }));
+    } else {
+      setVariableAmounts(v => ({ ...v, [`${monthKey}-${bill.id}`]: amount }));
+    }
     setUpdatingBill(null);
   }
 
@@ -586,6 +663,8 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:"#F2F4F8", fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      {!unlocked && <PasswordGate onUnlock={() => setUnlocked(true)} />}
+      {unlocked && (<>
       {updatingBill && <UpdateModal bill={updatingBill} onSave={amt => saveVariableAmount(updatingBill, amt)} onClose={() => setUpdatingBill(null)} />}
       {showAddModal && <AddBillModal onSave={addExtraBill} onClose={() => setShowAddModal(false)} />}
 
@@ -622,6 +701,7 @@ export default function App() {
         {view==="list"     && <ListView     allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} />}
         {view==="report"   && <ReportView   allBills={allBills} year={year} month={month} />}
       </div>
+    </>)}
     </div>
   );
 }
