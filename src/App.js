@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 
+const APP_PASSWORD = "$KasowitzFam";
+
 const FIXED_BILLS = [
   { id: 1,  name: "Rent",                  amount: 2640, day: 1,  category: "fixed" },
   { id: 2,  name: "United Refuah",         amount: 200,  day: 1,  category: "fixed" },
@@ -39,14 +41,13 @@ function fmt(n) {
 function ordinal(n) {
   const s = ["th","st","nd","rd"];
   const v = n % 100;
-  return n + (s[(v-20)%10] || s[v] || s[0]);
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
 function firstDay(y, m) { return new Date(y, m, 1).getDay(); }
 function totalFor(arr) { return arr.reduce((s, b) => s + (b.amount || 0), 0); }
 
-const APP_PASSWORD = "PredictaBill2024";
-
+// PASSWORD GATE
 function PasswordGate({ onUnlock }) {
   const [val, setVal] = useState("");
   const [error, setError] = useState(false);
@@ -61,16 +62,9 @@ function PasswordGate({ onUnlock }) {
   }
 
   return (
-    <div style={{
-      minHeight:"100vh", background:"#F2F4F8",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      padding:16,
-    }}>
+    <div style={{ minHeight:"100vh", background:"#F2F4F8", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", padding:16 }}>
       <div style={{ background:"#fff", borderRadius:16, padding:36, width:"100%", maxWidth:340, boxShadow:"0 8px 40px rgba(0,0,0,0.10)", textAlign:"center" }}>
-        <div style={{ fontSize:15, fontWeight:900, color:"#3B5BDB", letterSpacing:"-0.3px", marginBottom:6 }}>
-          <span style={{ color:"#3B5BDB" }}>Predict</span>aBill
-        </div>
+        <div style={{ fontSize:15, fontWeight:900, color:"#3B5BDB", marginBottom:6 }}>PredictaBill</div>
         <div style={{ fontSize:22, fontWeight:900, marginBottom:4 }}>Welcome back</div>
         <div style={{ fontSize:13, color:"#888", marginBottom:28 }}>Enter your password to continue</div>
         <input
@@ -79,28 +73,21 @@ function PasswordGate({ onUnlock }) {
           value={val}
           onChange={e => { setVal(e.target.value); setError(false); }}
           onKeyDown={e => e.key === "Enter" && attempt()}
-          style={{
-            width:"100%", padding:"12px 14px", borderRadius:10,
-            border: error ? "2px solid #C92A2A" : "2px solid #e0e0e0",
-            fontSize:16, marginBottom:10, boxSizing:"border-box",
-            outline:"none",
-          }}
+          style={{ width:"100%", padding:"12px 14px", borderRadius:10, border: error ? "2px solid #C92A2A" : "2px solid #e0e0e0", fontSize:16, marginBottom:10, boxSizing:"border-box", outline:"none" }}
           autoFocus
         />
         {error && <div style={{ color:"#C92A2A", fontSize:12, fontWeight:700, marginBottom:10 }}>Incorrect password. Try again.</div>}
-        <button onClick={attempt} style={{
-          width:"100%", padding:"12px", borderRadius:10, border:"none",
-          background:"#3B5BDB", color:"#fff", fontWeight:800, fontSize:15,
-          cursor:"pointer", marginTop:4,
-        }}>Unlock</button>
+        <button onClick={attempt} style={{ width:"100%", padding:"12px", borderRadius:10, border:"none", background:"#3B5BDB", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer", marginTop:4 }}>Unlock</button>
       </div>
     </div>
   );
 }
 
-
+// UPDATE / EDIT MODAL
+function UpdateModal({ bill, onSave, onClose }) {
   const [val, setVal] = useState(bill.amount ? String(bill.amount) : "");
   const isFixed = !bill.variable;
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
       <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:340, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -115,7 +102,7 @@ function PasswordGate({ onUnlock }) {
         )}
         {isFixed && (
           <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>
-            This change will apply to all future months.
+            This change will apply going forward.
           </div>
         )}
         <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:6 }}>
@@ -123,8 +110,13 @@ function PasswordGate({ onUnlock }) {
         </label>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24 }}>
           <span style={{ fontSize:20, fontWeight:700, color:"#333" }}>$</span>
-          <input type="number" placeholder="0.00" value={val} onChange={e => setVal(e.target.value)} autoFocus
-            style={{ flex:1, padding:"10px 12px", borderRadius:8, border:"2px solid #3B5BDB", fontSize:18, fontWeight:700 }} />
+          <input
+            type="number" placeholder="0.00" value={val}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && val && onSave(parseFloat(val))}
+            autoFocus
+            style={{ flex:1, padding:"10px 12px", borderRadius:8, border:"2px solid #3B5BDB", fontSize:18, fontWeight:700 }}
+          />
         </div>
         <div style={{ display:"flex", gap:10 }}>
           <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:8, border:"1px solid #ddd", background:"#f8f8f8", cursor:"pointer", fontWeight:600, fontSize:14 }}>Cancel</button>
@@ -135,9 +127,10 @@ function PasswordGate({ onUnlock }) {
   );
 }
 
+// ADD BILL MODAL
 function AddBillModal({ onSave, onClose }) {
   const [form, setForm] = useState({ name:"", amount:"", day:1, category:"medical" });
-  function set(k,v) { setForm(f => ({...f,[k]:v})); }
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
       <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:340, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -158,7 +151,7 @@ function AddBillModal({ onSave, onClose }) {
         </div>
         <div style={{ display:"flex", gap:10 }}>
           <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:8, border:"1px solid #ddd", background:"#f8f8f8", cursor:"pointer", fontWeight:600 }}>Cancel</button>
-          <button onClick={() => { if(form.name && form.amount) onSave({...form, amount:parseFloat(form.amount), id:Date.now()}); }}
+          <button onClick={() => { if (form.name && form.amount) onSave({ ...form, amount: parseFloat(form.amount), id: Date.now() }); }}
             style={{ flex:1, padding:10, borderRadius:8, border:"none", background:"#3B5BDB", color:"#fff", cursor:"pointer", fontWeight:800 }}>Add</button>
         </div>
       </div>
@@ -166,6 +159,7 @@ function AddBillModal({ onSave, onClose }) {
   );
 }
 
+// CALENDAR VIEW
 function CalendarView({ allBills, year, month, onUpdateVariable }) {
   const [selectedDay, setSelectedDay] = useState(null);
   const billsByDay = useMemo(() => {
@@ -176,9 +170,9 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
 
   const days = daysInMonth(year, month);
   const offset = firstDay(year, month);
-  const cells = [...Array(offset).fill(null), ...Array.from({length:days},(_,i)=>i+1)];
-  const isToday = d => d===TODAY.getDate() && month===TODAY.getMonth() && year===TODAY.getFullYear();
-  const isPast = d => new Date(year,month,d) < new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
+  const cells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const isToday = d => d === TODAY.getDate() && month === TODAY.getMonth() && year === TODAY.getFullYear();
+  const isPast = d => new Date(year, month, d) < new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
   const totalMonth = totalFor(allBills);
   const estimated = allBills.filter(b => b.variable && !b.amount);
 
@@ -188,8 +182,8 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
         {[
           ["Total Outgoing", fmt(totalMonth), "#C92A2A"],
           ["Confirmed", fmt(totalFor(allBills.filter(b => !b.variable || b.amount))), "#3B5BDB"],
-          ["Needs Update", estimated.length + " bill" + (estimated.length!==1?"s":""), "#E67700"],
-        ].map(([l,v,c]) => (
+          ["Needs Update", estimated.length + " bill" + (estimated.length !== 1 ? "s" : ""), "#E67700"],
+        ].map(([l, v, c]) => (
           <div key={l} style={{ flex:"1 1 120px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"12px 16px" }}>
             <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{l}</div>
             <div style={{ fontSize:18, fontWeight:900, color:c }}>{v}</div>
@@ -199,7 +193,7 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
 
       {estimated.length > 0 && (
         <div style={{ background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#E67700", marginBottom:8 }}>⚡ Tap to update this month's variable bills:</div>
+          <div style={{ fontSize:12, fontWeight:700, color:"#E67700", marginBottom:8 }}>Tap to update this month's variable bills:</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {estimated.map(b => (
               <button key={b.id} onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontWeight:700, fontSize:13, cursor:"pointer" }}>
@@ -211,10 +205,10 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
       )}
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, borderRadius:10, overflow:"hidden", border:"1px solid #e0e0e0", background:"#e0e0e0" }}>
-        {["S","M","T","W","T","F","S"].map((d,i) => (
+        {["S","M","T","W","T","F","S"].map((d, i) => (
           <div key={i} style={{ background:"#f5f5f5", padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#666" }}>{d}</div>
         ))}
-        {cells.map((d,i) => {
+        {cells.map((d, i) => {
           if (!d) return <div key={i} style={{ background:"#fafafa", minHeight:80 }} />;
           const dayBills = billsByDay[d] || [];
           const dayTotal = totalFor(dayBills);
@@ -223,40 +217,18 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
 
           return (
             <div key={d} onClick={() => setSelectedDay(selected ? null : d)}
-              style={{
-                background: selected ? "#EDF2FF" : "#fff",
-                minHeight:80, padding:"5px 4px",
-                cursor: dayBills.length ? "pointer" : "default",
-                borderLeft: selected ? "3px solid #3B5BDB" : "3px solid transparent",
-                opacity: isPast(d) ? 0.5 : 1,
-              }}>
-              <div style={{
-                fontSize:11, fontWeight: isToday(d) ? 900 : 500,
-                color: isToday(d) ? "#fff" : "#333",
-                background: isToday(d) ? "#3B5BDB" : "transparent",
-                borderRadius:"50%", width:20, height:20,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                marginBottom:3,
-              }}>{d}</div>
-              {dayBills.slice(0,2).map(b => {
+              style={{ background: selected ? "#EDF2FF" : "#fff", minHeight:80, padding:"5px 4px", cursor: dayBills.length ? "pointer" : "default", borderLeft: selected ? "3px solid #3B5BDB" : "3px solid transparent", opacity: isPast(d) ? 0.5 : 1 }}>
+              <div style={{ fontSize:11, fontWeight: isToday(d) ? 900 : 500, color: isToday(d) ? "#fff" : "#333", background: isToday(d) ? "#3B5BDB" : "transparent", borderRadius:"50%", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:3 }}>{d}</div>
+              {dayBills.slice(0, 2).map(b => {
                 const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
                 return (
-                  <div key={b.id} style={{
-                    background:m.bg, color:m.color,
-                    borderRadius:3, padding:"1px 4px", marginBottom:2,
-                    fontSize:9, fontWeight:700,
-                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                  }}>
+                  <div key={b.id} style={{ background:m.bg, color:m.color, borderRadius:3, padding:"1px 4px", marginBottom:2, fontSize:9, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {b.variable && !b.amount ? "?" : ""}{b.name.split(" ")[0]} {b.amount ? fmt(b.amount) : ""}
                   </div>
                 );
               })}
-              {dayBills.length > 2 && <div style={{ fontSize:8, color:"#aaa" }}>+{dayBills.length-2}</div>}
-              {dayTotal > 0 && (
-                <div style={{ fontSize:9, fontWeight:900, color: hasUnknown ? "#E67700" : "#333", textAlign:"right" }}>
-                  {fmt(dayTotal)}
-                </div>
-              )}
+              {dayBills.length > 2 && <div style={{ fontSize:8, color:"#aaa" }}>+{dayBills.length - 2}</div>}
+              {dayTotal > 0 && <div style={{ fontSize:9, fontWeight:900, color: hasUnknown ? "#E67700" : "#333", textAlign:"right" }}>{fmt(dayTotal)}</div>}
             </div>
           );
         })}
@@ -266,9 +238,9 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
         <div style={{ marginTop:12, background:"#fff", borderRadius:10, border:"1px solid #e0e0e0", overflow:"hidden" }}>
           <div style={{ padding:"12px 16px", background:"#f8f9ff", borderBottom:"1px solid #eee", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontWeight:800, fontSize:15 }}>{MONTHS[month]} {ordinal(selectedDay)}</div>
-            <div style={{ fontWeight:900, fontSize:15, color:"#C92A2A" }}>{fmt(totalFor(billsByDay[selectedDay]||[]))} due</div>
+            <div style={{ fontWeight:900, fontSize:15, color:"#C92A2A" }}>{fmt(totalFor(billsByDay[selectedDay] || []))} due</div>
           </div>
-          {(billsByDay[selectedDay]||[]).map(b => {
+          {(billsByDay[selectedDay] || []).map(b => {
             const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
             return (
               <div key={b.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom:"1px solid #f5f5f5" }}>
@@ -294,9 +266,10 @@ function CalendarView({ allBills, year, month, onUpdateVariable }) {
   );
 }
 
+// LIST VIEW
 function ListView({ allBills, year, month, onUpdateVariable }) {
-  const sorted = [...allBills].sort((a,b) => a.day - b.day);
-  const isCurrentMonth = month===TODAY.getMonth() && year===TODAY.getFullYear();
+  const sorted = [...allBills].sort((a, b) => a.day - b.day);
+  const isCurrentMonth = month === TODAY.getMonth() && year === TODAY.getFullYear();
   const todayDate = TODAY.getDate();
   const upcoming = sorted.filter(b => !isCurrentMonth || b.day >= todayDate);
   const past = sorted.filter(b => isCurrentMonth && b.day < todayDate);
@@ -308,7 +281,7 @@ function ListView({ allBills, year, month, onUpdateVariable }) {
       <div style={{ background:"#fff", borderRadius:10, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", gap:12, border:`1px solid ${needsUpdate ? "#FFE8CC" : "#eee"}` }}>
         <div style={{ width:46, textAlign:"center", flexShrink:0 }}>
           <div style={{ fontWeight:900, fontSize:18, color:"#1a1a1a", lineHeight:1 }}>{b.day}</div>
-          <div style={{ fontSize:9, fontWeight:700, color:"#999", textTransform:"uppercase", letterSpacing:"0.03em" }}>{MONTHS[month].slice(0,3)}</div>
+          <div style={{ fontSize:9, fontWeight:700, color:"#999", textTransform:"uppercase", letterSpacing:"0.03em" }}>{MONTHS[month].slice(0, 3)}</div>
         </div>
         <div style={{ width:40, height:40, borderRadius:8, background:m.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{m.icon}</div>
         <div style={{ flex:1 }}>
@@ -336,9 +309,7 @@ function ListView({ allBills, year, month, onUpdateVariable }) {
         </div>
         <div style={{ flex:1, background:"#FFF9F0", borderRadius:10, padding:"14px 16px", border:"1px solid #FFE8CC" }}>
           <div style={{ fontSize:10, fontWeight:700, color:"#E67700", textTransform:"uppercase", letterSpacing:"0.06em" }}>Still Needed</div>
-          <div style={{ fontSize:22, fontWeight:900, color:"#E67700", marginTop:4 }}>
-            {allBills.filter(b=>b.variable&&!b.amount).length} updates
-          </div>
+          <div style={{ fontSize:22, fontWeight:900, color:"#E67700", marginTop:4 }}>{allBills.filter(b => b.variable && !b.amount).length} updates</div>
         </div>
       </div>
       {upcoming.length > 0 && (
@@ -359,6 +330,7 @@ function ListView({ allBills, year, month, onUpdateVariable }) {
   );
 }
 
+// CALENDAR PRINT PAGE
 function CalendarPrintPage({ allBills, year, month, onDone }) {
   const billsByDay = useMemo(() => {
     const map = {};
@@ -368,27 +340,17 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
 
   const days = daysInMonth(year, month);
   const offset = firstDay(year, month);
-  const cells = [...Array(offset).fill(null), ...Array.from({length:days},(_,i)=>i+1)];
+  const cells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
   const totalMonth = totalFor(allBills);
 
   return (
     <div style={{ position:"fixed", inset:0, background:"#fff", zIndex:2000, overflow:"auto" }}>
-      <div className="no-print" style={{
-        position:"sticky", top:0, background:"#fff", borderBottom:"1px solid #eee",
-        padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", zIndex:10,
-      }}>
-        <button onClick={onDone} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:700, fontSize:13, cursor:"pointer" }}>← Done</button>
-        <button onClick={() => window.print()} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>🖨 Print / Save PDF</button>
+      <div className="no-print" style={{ position:"sticky", top:0, background:"#fff", borderBottom:"1px solid #eee", padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", zIndex:10 }}>
+        <button onClick={onDone} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:700, fontSize:13, cursor:"pointer" }}>Done</button>
+        <button onClick={() => window.print()} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>Print / Save PDF</button>
       </div>
-
-      <style>{`
-        @media print {
-          .no-print { display:none !important; }
-          @page { size: 11in 8.5in; margin: 0.4in; }
-        }
-      `}</style>
-
+      <style>{`@media print { .no-print { display:none !important; } @page { size: 11in 8.5in; margin: 0.4in; } }`}</style>
       <div style={{ padding:"16px", maxWidth:1000, margin:"0 auto", fontFamily:"-apple-system, sans-serif", color:"#1a1a1a" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", borderBottom:"3px solid #1a1a1a", paddingBottom:10, marginBottom:14 }}>
           <div>
@@ -397,7 +359,6 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
           </div>
           <div style={{ fontSize:13, fontWeight:700, color:"#C92A2A" }}>Total: {fmt(totalMonth)}</div>
         </div>
-
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, border:"1px solid #ccc", background:"#ccc" }}>
           {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
             <div key={d} style={{ background:"#f5f5f5", padding:"6px 4px", textAlign:"center", fontSize:11, fontWeight:700, color:"#555" }}>{d}</div>
@@ -411,18 +372,12 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
                   <>
                     <div style={{ fontWeight:700, fontSize:11, marginBottom:3 }}>{d}</div>
                     {dayBills.map(b => (
-                      <div key={b.id} style={{
-                        fontSize:9, fontWeight:600, marginBottom:1.5,
-                        color: CATEGORY_META[b.category]?.color || "#333",
-                        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                      }}>
-                        {b.name.split(" ").slice(0,2).join(" ")} {b.amount ? fmt(b.amount) : "TBD"}
+                      <div key={b.id} style={{ fontSize:9, fontWeight:600, marginBottom:1.5, color: CATEGORY_META[b.category]?.color || "#333", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                        {b.name.split(" ").slice(0, 2).join(" ")} {b.amount ? fmt(b.amount) : "TBD"}
                       </div>
                     ))}
                     {dayTotal > 0 && (
-                      <div style={{ fontSize:9, fontWeight:900, borderTop:"1px solid #eee", marginTop:2, paddingTop:1 }}>
-                        {fmt(dayTotal)}
-                      </div>
+                      <div style={{ fontSize:9, fontWeight:900, borderTop:"1px solid #eee", marginTop:2, paddingTop:1 }}>{fmt(dayTotal)}</div>
                     )}
                   </>
                 )}
@@ -430,9 +385,8 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
             );
           })}
         </div>
-
         <div style={{ display:"flex", gap:16, marginTop:14, fontSize:10 }}>
-          {Object.entries(CATEGORY_META).map(([k,v]) => (
+          {Object.entries(CATEGORY_META).map(([k, v]) => (
             <span key={k} style={{ display:"flex", alignItems:"center", gap:4, fontWeight:700, color:v.color }}>
               <span style={{ width:8, height:8, borderRadius:"50%", background:v.color, display:"inline-block" }} />{v.label}
             </span>
@@ -443,156 +397,116 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
   );
 }
 
-function ReportView({ allBills, year, month }) {
-  const [fullScreen, setFullScreen] = useState(false);
-  const [calendarPrint, setCalendarPrint] = useState(false);
-  const sorted = [...allBills].sort((a,b) => a.day - b.day);
+// LIST REPORT FULL SCREEN
+function ListReportPage({ allBills, year, month, onDone }) {
+  const sorted = [...allBills].sort((a, b) => a.day - b.day);
   const total = totalFor(sorted);
-  const weeks = [[],[],[],[]];
-  sorted.forEach(b => { weeks[Math.min(Math.floor((b.day-1)/7),3)].push(b); });
-
+  const weeks = [[], [], [], []];
+  sorted.forEach(b => { weeks[Math.min(Math.floor((b.day - 1) / 7), 3)].push(b); });
   const byCategory = {};
-  sorted.forEach(b => {
-    if (!byCategory[b.category]) byCategory[b.category] = [];
-    byCategory[b.category].push(b);
-  });
+  sorted.forEach(b => { if (!byCategory[b.category]) byCategory[b.category] = []; byCategory[b.category].push(b); });
 
-  if (calendarPrint) {
-    return <CalendarPrintPage allBills={allBills} year={year} month={month} onDone={() => setCalendarPrint(false)} />;
-  }
-
-  if (fullScreen) {
-    return (
-      <div style={{
-        position:"fixed", inset:0, background:"#fff", zIndex:2000,
-        overflow:"auto", fontFamily:"-apple-system, Georgia, serif",
-      }}>
-        <div className="no-print" style={{
-          position:"sticky", top:0, background:"#fff", borderBottom:"1px solid #eee",
-          padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center",
-          zIndex:10,
-        }}>
-          <button onClick={() => setFullScreen(false)} style={{
-            background:"#f0f0f0", border:"none", borderRadius:8, padding:"8px 16px",
-            fontWeight:700, fontSize:13, cursor:"pointer",
-          }}>← Done</button>
-          <button onClick={() => window.print()} style={{
-            background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8,
-            padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer",
-          }}>🖨 Print / Save PDF</button>
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#fff", zIndex:2000, overflow:"auto" }}>
+      <div className="no-print" style={{ position:"sticky", top:0, background:"#fff", borderBottom:"1px solid #eee", padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", zIndex:10 }}>
+        <button onClick={onDone} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:700, fontSize:13, cursor:"pointer" }}>Done</button>
+        <button onClick={() => window.print()} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>Print / Save PDF</button>
+      </div>
+      <style>{`@media print { .no-print { display:none !important; } @page { size: 8.5in 11in; margin: 0.65in; } }`}</style>
+      <div style={{ padding:"24px 20px", maxWidth:800, margin:"0 auto", color:"#1a1a1a", fontSize:13, lineHeight:1.5, fontFamily:"-apple-system, Georgia, serif" }}>
+        <div style={{ borderBottom:"3px solid #1a1a1a", paddingBottom:14, marginBottom:20 }}>
+          <div style={{ fontSize:13, fontWeight:900, color:"#3B5BDB", marginBottom:4 }}>PredictaBill</div>
+          <div style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", margin:0 }}>{MONTHS[month]} {year}</div>
+          <div style={{ fontSize:12, color:"#777", marginTop:3 }}>Monthly Cash Flow Forecast. Outgoing payments only.</div>
         </div>
-
-        <style>{`
-          @media print {
-            .no-print { display:none !important; }
-            body { padding:0; }
-          }
-        `}</style>
-
-        <div style={{ padding:"24px 20px", maxWidth:800, margin:"0 auto", color:"#1a1a1a", fontSize:13, lineHeight:1.5 }}>
-          <div style={{ borderBottom:"3px solid #1a1a1a", paddingBottom:14, marginBottom:20 }}>
-            <div style={{ fontSize:13, fontWeight:900, color:"#3B5BDB", letterSpacing:"-0.3px", marginBottom:4 }}>PredictaBill</div>
-            <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", margin:0 }}>{MONTHS[month]} {year}</h1>
-            <div style={{ fontSize:12, color:"#777", marginTop:3 }}>Monthly Cash Flow Forecast · Outgoing payments only</div>
-          </div>
-
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:24 }}>
-            <div style={{ border:"1px solid #ddd", borderRadius:8, padding:14 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:4 }}>Total Outgoing</div>
-              <div style={{ fontSize:22, fontWeight:900, color:"#C92A2A" }}>{fmt(total)}</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:24 }}>
+          {[["Total Outgoing", fmt(total), "#C92A2A"],["Fixed Bills", fmt(totalFor(sorted.filter(b => b.category !== "credit"))), "#3B5BDB"],["Credit Cards", fmt(totalFor(sorted.filter(b => b.category === "credit"))), "#C92A2A"],["Payments", sorted.length, "#333"]].map(([l, v, c]) => (
+            <div key={l} style={{ border:"1px solid #ddd", borderRadius:8, padding:14 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:4 }}>{l}</div>
+              <div style={{ fontSize:22, fontWeight:900, color:c }}>{v}</div>
             </div>
-            <div style={{ border:"1px solid #ddd", borderRadius:8, padding:14 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:4 }}>Fixed Bills</div>
-              <div style={{ fontSize:22, fontWeight:900, color:"#3B5BDB" }}>{fmt(totalFor(sorted.filter(b=>b.category!=="credit")))}</div>
+          ))}
+        </div>
+        <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>Week by Week</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10, marginBottom:8 }}>
+          {["Week 1 · 1-7","Week 2 · 8-14","Week 3 · 15-21","Week 4 · 22-31"].map((l, i) => (
+            <div key={i} style={{ border:"1px solid #ddd", borderRadius:8, padding:12 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", color:"#888", marginBottom:4 }}>{l}</div>
+              <div style={{ fontSize:20, fontWeight:900 }}>{fmt(totalFor(weeks[i]))}</div>
+              <div style={{ fontSize:10, color:"#999", marginTop:2 }}>{weeks[i].length} payment{weeks[i].length !== 1 ? "s" : ""}</div>
             </div>
-            <div style={{ border:"1px solid #ddd", borderRadius:8, padding:14 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:4 }}>Credit Cards</div>
-              <div style={{ fontSize:22, fontWeight:900, color:"#C92A2A" }}>{fmt(totalFor(sorted.filter(b=>b.category==="credit")))}</div>
+          ))}
+        </div>
+        <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>By Category</div>
+        {Object.entries(byCategory).map(([cat, bills]) => (
+          <div key={cat}>
+            <div style={{ fontSize:11, fontWeight:700, padding:"10px 0 4px", borderBottom:"1px solid #eee", marginBottom:4, color: CATEGORY_META[cat]?.color || "#333" }}>
+              {CATEGORY_META[cat]?.label || cat} · {fmt(totalFor(bills))}
             </div>
-            <div style={{ border:"1px solid #ddd", borderRadius:8, padding:14 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:4 }}>Payments</div>
-              <div style={{ fontSize:22, fontWeight:900 }}>{sorted.length}</div>
-            </div>
-          </div>
-
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>Week by Week</div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10, marginBottom:8 }}>
-            {["Week 1 · 1-7","Week 2 · 8-14","Week 3 · 15-21","Week 4 · 22-31"].map((l,i) => (
-              <div key={i} style={{ border:"1px solid #ddd", borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", color:"#888", marginBottom:4 }}>{l}</div>
-                <div style={{ fontSize:20, fontWeight:900 }}>{fmt(totalFor(weeks[i]))}</div>
-                <div style={{ fontSize:10, color:"#999", marginTop:2 }}>{weeks[i].length} payment{weeks[i].length!==1?"s":""}</div>
+            {bills.map(b => (
+              <div key={b.id} style={{ display:"flex", padding:"7px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8 }}>
+                <div style={{ width:50, color:"#777", fontSize:11, fontWeight:700, flexShrink:0 }}>{ordinal(b.day)}</div>
+                <div style={{ flex:1, fontWeight:600 }}>{b.name}{b.variable && !b.amount && <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}> est</span>}</div>
+                <div style={{ fontWeight:800, fontSize:13, flexShrink:0 }}>{b.amount ? fmt(b.amount) : <span style={{ color:"#E67700", fontSize:10 }}>TBD</span>}</div>
               </div>
             ))}
           </div>
-
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>By Category</div>
-          {Object.entries(byCategory).map(([cat, bills]) => (
-            <div key={cat}>
-              <div style={{ fontSize:11, fontWeight:700, padding:"10px 0 4px", borderBottom:"1px solid #eee", marginBottom:4, color: CATEGORY_META[cat]?.color || "#333" }}>
-                {CATEGORY_META[cat]?.label || cat} · {fmt(totalFor(bills))}
-              </div>
-              {bills.map(b => (
-                <div key={b.id} style={{ display:"flex", padding:"7px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8 }}>
-                  <div style={{ width:50, color:"#777", fontSize:11, flexShrink:0, fontWeight:700 }}>{ordinal(b.day)}</div>
-                  <div style={{ flex:1, fontWeight:600 }}>{b.name}{b.variable && !b.amount && <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}> ~ est</span>}</div>
-                  <div style={{ fontWeight:800, fontSize:13, textAlign:"right", flexShrink:0 }}>{b.amount ? fmt(b.amount) : <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}>TBD</span>}</div>
-                </div>
-              ))}
-            </div>
-          ))}
-
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>All Bills, Chronological</div>
-          {sorted.map(b => (
-            <div key={b.id} style={{ display:"flex", padding:"7px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8 }}>
-              <div style={{ width:50, fontSize:11, fontWeight:800, flexShrink:0, color: CATEGORY_META[b.category]?.color || "#333" }}>{ordinal(b.day)}</div>
-              <div style={{ flex:1, fontWeight:600 }}>{b.name}{b.variable && !b.amount && <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}> ~ est</span>}</div>
-              <div style={{ fontWeight:800, fontSize:13, textAlign:"right", flexShrink:0 }}>{b.amount ? fmt(b.amount) : <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}>TBD</span>}</div>
-            </div>
-          ))}
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderTop:"2px solid #1a1a1a", marginTop:6, fontWeight:900, fontSize:15 }}>
-            <span>TOTAL</span><span>{fmt(total)}</span>
+        ))}
+        <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, margin:"20px 0 12px" }}>All Bills, Chronological</div>
+        {sorted.map(b => (
+          <div key={b.id} style={{ display:"flex", padding:"7px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8 }}>
+            <div style={{ width:50, fontSize:11, fontWeight:800, flexShrink:0, color: CATEGORY_META[b.category]?.color || "#333" }}>{ordinal(b.day)}</div>
+            <div style={{ flex:1, fontWeight:600 }}>{b.name}{b.variable && !b.amount && <span style={{ color:"#E67700", fontSize:10, fontWeight:700 }}> est</span>}</div>
+            <div style={{ fontWeight:800, fontSize:13, flexShrink:0 }}>{b.amount ? fmt(b.amount) : <span style={{ color:"#E67700", fontSize:10 }}>TBD</span>}</div>
           </div>
-
-          <div style={{ borderTop:"1px solid #ddd", marginTop:24, paddingTop:10, fontSize:10, color:"#aaa", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:6 }}>
-            <span>PredictaBill · {MONTHS[month]} {year} · Forward-looking forecast</span>
-            <span>~ est = estimated · TBD = awaiting statement</span>
-          </div>
+        ))}
+        <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderTop:"2px solid #1a1a1a", marginTop:6, fontWeight:900, fontSize:15 }}>
+          <span>TOTAL</span><span>{fmt(total)}</span>
+        </div>
+        <div style={{ borderTop:"1px solid #ddd", marginTop:24, paddingTop:10, fontSize:10, color:"#aaa", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:6 }}>
+          <span>PredictaBill · {MONTHS[month]} {year}</span>
+          <span>est = estimated · TBD = awaiting statement</span>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+// REPORT VIEW
+function ReportView({ allBills, year, month }) {
+  const [showList, setShowList] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const sorted = [...allBills].sort((a, b) => a.day - b.day);
+  const total = totalFor(sorted);
+  const weeks = [[], [], [], []];
+  sorted.forEach(b => { weeks[Math.min(Math.floor((b.day - 1) / 7), 3)].push(b); });
+
+  if (showList) return <ListReportPage allBills={allBills} year={year} month={month} onDone={() => setShowList(false)} />;
+  if (showCalendar) return <CalendarPrintPage allBills={allBills} year={year} month={month} onDone={() => setShowCalendar(false)} />;
 
   return (
     <div>
       <div style={{ background:"#f8f9ff", border:"1px solid #e0e8ff", borderRadius:12, padding:"20px", marginBottom:20, textAlign:"center" }}>
         <div style={{ fontSize:16, fontWeight:800, marginBottom:6 }}>Monthly Forecast Report</div>
         <div style={{ fontSize:13, color:"#666", marginBottom:16, lineHeight:1.6 }}>
-          Two printable formats. The list breaks bills down by category and week. The calendar shows the month visually, like the whiteboard you're used to.
+          Two printable formats. Opens full screen, then use your browser's print or share menu to save as PDF.
         </div>
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", justifyContent:"center" }}>
-          <button onClick={() => setFullScreen(true)} style={{
-            background:"#3B5BDB", color:"#fff", border:"none", borderRadius:10,
-            padding:"14px 24px", fontWeight:800, fontSize:15, cursor:"pointer", flex:"1 1 140px", maxWidth:220,
-          }}>
-            📄 List Report
+          <button onClick={() => setShowList(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:10, padding:"14px 24px", fontWeight:800, fontSize:15, cursor:"pointer", flex:"1 1 140px", maxWidth:220 }}>
+            List Report
           </button>
-          <button onClick={() => setCalendarPrint(true)} style={{
-            background:"#fff", color:"#3B5BDB", border:"2px solid #3B5BDB", borderRadius:10,
-            padding:"14px 24px", fontWeight:800, fontSize:15, cursor:"pointer", flex:"1 1 140px", maxWidth:220,
-          }}>
-            📅 Calendar Grid
+          <button onClick={() => setShowCalendar(true)} style={{ background:"#fff", color:"#3B5BDB", border:"2px solid #3B5BDB", borderRadius:10, padding:"14px 24px", fontWeight:800, fontSize:15, cursor:"pointer", flex:"1 1 140px", maxWidth:220 }}>
+            Calendar Grid
           </button>
         </div>
       </div>
-
       <div style={{ background:"#fff", borderRadius:12, border:"1px solid #eee", overflow:"hidden" }}>
         <div style={{ padding:"16px 18px", borderBottom:"1px solid #f0f0f0" }}>
-          <div style={{ fontSize:11, fontWeight:900, color:"#3B5BDB", letterSpacing:"0.04em" }}>PREDICTABILL</div>
+          <div style={{ fontSize:11, fontWeight:900, color:"#3B5BDB" }}>PREDICTABILL</div>
           <div style={{ fontSize:20, fontWeight:900, marginTop:2 }}>{MONTHS[month]} {year} Preview</div>
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", borderBottom:"1px solid #f0f0f0" }}>
-          {[["Total Outgoing",fmt(total),"#C92A2A"],["Fixed",fmt(totalFor(sorted.filter(b=>b.category!=="credit"))),"#3B5BDB"],["Credit Cards",fmt(totalFor(sorted.filter(b=>b.category==="credit"))),"#C92A2A"]].map(([l,v,c])=>(
+          {[["Total Outgoing", fmt(total), "#C92A2A"],["Fixed", fmt(totalFor(sorted.filter(b => b.category !== "credit"))), "#3B5BDB"],["Credit Cards", fmt(totalFor(sorted.filter(b => b.category === "credit"))), "#C92A2A"]].map(([l, v, c]) => (
             <div key={l} style={{ flex:"1 1 100px", padding:"14px 16px", borderRight:"1px solid #f0f0f0" }}>
               <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em" }}>{l}</div>
               <div style={{ fontSize:18, fontWeight:900, color:c, marginTop:4 }}>{v}</div>
@@ -602,7 +516,7 @@ function ReportView({ allBills, year, month }) {
         <div style={{ padding:"16px 18px" }}>
           <div style={{ fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:10 }}>Week by Week</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            {["1-7","8-14","15-21","22-31"].map((l,i)=>(
+            {["1-7","8-14","15-21","22-31"].map((l, i) => (
               <div key={i} style={{ flex:"1 1 60px", background:"#f8f8f8", borderRadius:8, padding:"10px", textAlign:"center" }}>
                 <div style={{ fontSize:9, color:"#888", marginBottom:4 }}>{l}</div>
                 <div style={{ fontSize:15, fontWeight:900 }}>{fmt(totalFor(weeks[i]))}</div>
@@ -615,6 +529,7 @@ function ReportView({ allBills, year, month }) {
   );
 }
 
+// APP ROOT
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [year, setYear] = useState(TODAY.getFullYear());
@@ -630,15 +545,12 @@ export default function App() {
 
   const allBills = useMemo(() => {
     const fixed = FIXED_BILLS.map(b => ({ ...b, variable: false, amount: fixedOverrides[b.id] ?? b.amount }));
-    const variable = VARIABLE_BILLS.map(b => ({
-      ...b, variable: true,
-      amount: variableAmounts[`${monthKey}-${b.id}`] || 0,
-    }));
+    const variable = VARIABLE_BILLS.map(b => ({ ...b, variable: true, amount: variableAmounts[`${monthKey}-${b.id}`] || 0 }));
     const extra = extraBills.filter(b => b.monthKey === monthKey).map(b => ({ ...b, variable: false }));
     return [...fixed, ...variable, ...extra];
   }, [variableAmounts, fixedOverrides, extraBills, monthKey]);
 
-  function saveVariableAmount(bill, amount) {
+  function saveAmount(bill, amount) {
     if (!bill.variable) {
       setFixedOverrides(f => ({ ...f, [bill.id]: amount }));
     } else {
@@ -652,20 +564,14 @@ export default function App() {
     setShowAddModal(false);
   }
 
-  function prevMonth() { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); }
-  function nextMonth() { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); }
+  function prevMonth() { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); }
+  function nextMonth() { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); }
 
-  const tabs = [
-    { id:"calendar", label:"📅 Calendar" },
-    { id:"list",     label:"📋 List" },
-    { id:"report",   label:"📄 Report" },
-  ];
+  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />;
 
   return (
     <div style={{ minHeight:"100vh", background:"#F2F4F8", fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      {!unlocked && <PasswordGate onUnlock={() => setUnlocked(true)} />}
-      {unlocked && (<>
-      {updatingBill && <UpdateModal bill={updatingBill} onSave={amt => saveVariableAmount(updatingBill, amt)} onClose={() => setUpdatingBill(null)} />}
+      {updatingBill && <UpdateModal bill={updatingBill} onSave={amt => saveAmount(updatingBill, amt)} onClose={() => setUpdatingBill(null)} />}
       {showAddModal && <AddBillModal onSave={addExtraBill} onClose={() => setShowAddModal(false)} />}
 
       <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"0 16px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
@@ -673,35 +579,25 @@ export default function App() {
           <span style={{ color:"#3B5BDB" }}>Predict</span>aBill
         </div>
         <div style={{ display:"flex", gap:2, flex:1 }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setView(t.id)} style={{
-              background: view===t.id ? "#EDF2FF" : "transparent",
-              color: view===t.id ? "#3B5BDB" : "#666",
-              border:"none", padding:"10px 12px", cursor:"pointer",
-              fontWeight: view===t.id ? 800 : 500, fontSize:13, borderRadius:6,
-            }}>{t.label}</button>
+          {[{ id:"calendar", label:"Calendar" },{ id:"list", label:"List" },{ id:"report", label:"Report" }].map(t => (
+            <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? "#EDF2FF" : "transparent", color: view === t.id ? "#3B5BDB" : "#666", border:"none", padding:"10px 12px", cursor:"pointer", fontWeight: view === t.id ? 800 : 500, fontSize:13, borderRadius:6 }}>{t.label}</button>
           ))}
         </div>
-        <button onClick={() => setShowAddModal(true)} style={{
-          background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8,
-          padding:"8px 14px", fontWeight:700, fontSize:13, cursor:"pointer", flexShrink:0,
-        }}>+ Add</button>
+        <button onClick={() => setShowAddModal(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontWeight:700, fontSize:13, cursor:"pointer", flexShrink:0 }}>+ Add</button>
       </div>
 
       <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"10px 16px", display:"flex", alignItems:"center", gap:10 }}>
         <button onClick={prevMonth} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:14 }}>←</button>
         <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.3px", flex:1 }}>{MONTHS[month]} {year}</div>
-        <button onClick={() => { setMonth(TODAY.getMonth()); setYear(TODAY.getFullYear()); }}
-          style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12, color:"#3B5BDB", fontWeight:700 }}>Today</button>
+        <button onClick={() => { setMonth(TODAY.getMonth()); setYear(TODAY.getFullYear()); }} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12, color:"#3B5BDB", fontWeight:700 }}>Today</button>
         <button onClick={nextMonth} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:14 }}>→</button>
       </div>
 
       <div style={{ maxWidth:920, margin:"0 auto", padding:"16px 12px" }}>
-        {view==="calendar" && <CalendarView allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} />}
-        {view==="list"     && <ListView     allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} />}
-        {view==="report"   && <ReportView   allBills={allBills} year={year} month={month} />}
+        {view === "calendar" && <CalendarView allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} />}
+        {view === "list"     && <ListView     allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} />}
+        {view === "report"   && <ReportView   allBills={allBills} year={year} month={month} />}
       </div>
-    </>)}
     </div>
   );
 }
