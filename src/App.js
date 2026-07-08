@@ -66,9 +66,24 @@ async function fetchSheetData() {
   const rows = text.trim().split("\n").slice(1);
   const data = {};
   rows.forEach(row => {
-    const cols = row.split(",").map(c => c.replace(/^"|"$/g, "").trim());
+    // Handle quoted fields (numbers with commas come through as "1,234.56")
+    const cols = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+      const ch = row[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        cols.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    cols.push(current.trim());
     const name = cols[0];
-    const amount = parseFloat(cols[1]?.replace(/,/g, "")) || 0;
+    const amount = parseFloat((cols[1] || "").replace(/,/g, "")) || 0;
     const lastUpdated = cols[3] || "";
     if (name) data[name] = { amount, lastUpdated };
   });
