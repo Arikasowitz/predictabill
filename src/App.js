@@ -1,10 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 const APP_PASSWORD = "$KasowitzFam";
 const SHEET_ID = "1kES2NceZjJX-kAaOH9KivOn78RL9NoCp-DlhF4Me8WU";
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-
-const STORAGE_KEY = "predictabill_v1";
+const STORAGE_KEY = "predictabill_v2";
 
 const FIXED_BILLS = [
   { id: 1,  name: "Rent",                  amount: 2640, day: 1,  category: "fixed",   recurring: true },
@@ -56,14 +55,15 @@ function formatSheetDate(raw) {
   if (!raw) return "";
   const d = new Date(raw);
   if (isNaN(d)) return raw;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function isCurrentMonth(year, month) {
+  return year === TODAY.getFullYear() && month === TODAY.getMonth();
 }
 
 function loadStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch(e) { return {}; }
+  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; }
+  catch(e) { return {}; }
 }
 function saveStorage(data) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
@@ -76,21 +76,38 @@ async function fetchSheetData() {
   const data = {};
   rows.forEach(row => {
     const cols = [];
-    let current = "";
-    let inQuotes = false;
+    let cur = "", inQ = false;
     for (let i = 0; i < row.length; i++) {
       const ch = row[i];
-      if (ch === '"') { inQuotes = !inQuotes; }
-      else if (ch === "," && !inQuotes) { cols.push(current.trim()); current = ""; }
-      else { current += ch; }
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
     }
-    cols.push(current.trim());
+    cols.push(cur.trim());
     const name = cols[0];
     const amount = parseFloat((cols[1] || "").replace(/,/g, "")) || 0;
     const lastUpdated = cols[3] || "";
     if (name) data[name] = { amount, lastUpdated };
   });
   return data;
+}
+
+// ─── CATEGORY ICON WITH CARD BADGE ───────────────────────────────────────────
+function CategoryIcon({ bill, size = 38 }) {
+  const m = CATEGORY_META[bill.baseCategory || bill.category] || CATEGORY_META.fixed;
+  const isCovered = bill.category === "cardcovered";
+  return (
+    <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
+      <div style={{ width:size, height:size, borderRadius:8, background:m.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:size * 0.47, opacity: isCovered ? 0.7 : 1 }}>
+        {m.icon}
+      </div>
+      {isCovered && (
+        <div style={{ position:"absolute", bottom:-2, right:-2, background:"#888", borderRadius:"50%", width:14, height:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, border:"1.5px solid #fff" }}>
+          🔗
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── PASSWORD GATE ────────────────────────────────────────────────────────────
@@ -128,12 +145,13 @@ function UpdateModal({ bill, onSave, onClose }) {
       <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:340, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ fontSize:13, fontWeight:700, color:"#888", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{isFixed ? "Edit Fixed Bill" : "Update Amount"}</div>
         <div style={{ fontSize:20, fontWeight:900, marginBottom:6 }}>{bill.name}</div>
-        {bill.hint && <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>📧 {bill.hint}</div>}
-        {isFixed && <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:20, lineHeight:1.5 }}>This change will be saved permanently.</div>}
+        {bill.hint && <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:16, lineHeight:1.5 }}>📧 {bill.hint}</div>}
+        {isFixed && <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:16, lineHeight:1.5 }}>This change will be saved permanently.</div>}
         <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:6 }}>{isFixed ? "New monthly amount" : "Amount leaving your account this month"}</label>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24 }}>
           <span style={{ fontSize:20, fontWeight:700 }}>$</span>
-          <input type="number" placeholder="0.00" value={val} onChange={e => setVal(e.target.value)}
+          <input type="number" placeholder="0.00" value={val}
+            onChange={e => setVal(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && val) onSave(parseFloat(val)); }}
             autoFocus style={{ flex:1, padding:"10px 12px", borderRadius:8, border:"2px solid #3B5BDB", fontSize:18, fontWeight:700 }} />
         </div>
@@ -214,7 +232,7 @@ function AddBillModal({ onSave, onClose }) {
           <button onClick={() => {
             if (form.name && form.amount) {
               const category = form.paidByCard ? "cardcovered" : form.category;
-              onSave({ ...form, amount: parseFloat(form.amount), id: Date.now(), category, variable: false });
+              onSave({ ...form, amount: parseFloat(form.amount), id: Date.now(), category, baseCategory: form.category, variable: false });
             }
           }} style={{ flex:1, padding:10, borderRadius:8, border:"none", background:"#3B5BDB", color:"#fff", cursor:"pointer", fontWeight:800 }}>Add</button>
         </div>
@@ -229,21 +247,21 @@ function SummaryStrip({ allBills }) {
   const covered = cardCoveredTotal(allBills);
   const pending = allBills.filter(b => b.variable && !b.amount && b.category !== "cardcovered").length;
   return (
-    <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
-      <div style={{ flex:"1 1 100px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"12px 14px" }}>
-        <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Total Outgoing</div>
-        <div style={{ fontSize:18, fontWeight:900, color:"#C92A2A" }}>{fmt(total)}</div>
+    <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+      <div style={{ flex:"1 1 90px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"11px 14px" }}>
+        <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>Total Outgoing</div>
+        <div style={{ fontSize:17, fontWeight:900, color:"#C92A2A" }}>{fmt(total)}</div>
       </div>
       {covered > 0 && (
-        <div style={{ flex:"1 1 100px", background:"#F5F5F5", border:"1px solid #e0e0e0", borderRadius:10, padding:"12px 14px" }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Paid by Card</div>
-          <div style={{ fontSize:18, fontWeight:900, color:"#888" }}>{fmt(covered)}</div>
-          <div style={{ fontSize:9, color:"#aaa", marginTop:1 }}>not counted above</div>
+        <div style={{ flex:"1 1 90px", background:"#F5F5F5", border:"1px solid #e0e0e0", borderRadius:10, padding:"11px 14px" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>Paid by Card</div>
+          <div style={{ fontSize:17, fontWeight:900, color:"#888" }}>{fmt(covered)}</div>
+          <div style={{ fontSize:9, color:"#aaa", marginTop:1 }}>excluded above</div>
         </div>
       )}
-      <div style={{ flex:"1 1 100px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"12px 14px" }}>
-        <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Needs Update</div>
-        <div style={{ fontSize:18, fontWeight:900, color: pending > 0 ? "#E67700" : "#5C940D" }}>
+      <div style={{ flex:"1 1 90px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"11px 14px" }}>
+        <div style={{ fontSize:10, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>Needs Update</div>
+        <div style={{ fontSize:17, fontWeight:900, color: pending > 0 ? "#E67700" : "#5C940D" }}>
           {pending > 0 ? pending + " bill" + (pending !== 1 ? "s" : "") : "All set ✓"}
         </div>
       </div>
@@ -257,16 +275,71 @@ function WeekSummary({ allBills }) {
   allBills.filter(b => b.category !== "cardcovered").forEach(b => {
     weeks[Math.min(Math.floor((b.day - 1) / 7), 3)].push(b);
   });
-  const labels = ["Week 1\n1–7", "Week 2\n8–14", "Week 3\n15–21", "Week 4\n22–31"];
   return (
-    <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-      {weeks.map((w, i) => (
-        <div key={i} style={{ flex:1, background:"#fff", borderRadius:10, padding:"10px 8px", textAlign:"center", border:"1px solid #eee" }}>
-          <div style={{ fontSize:9, color:"#888", fontWeight:700, marginBottom:4, whiteSpace:"pre-line", lineHeight:1.3 }}>{labels[i]}</div>
-          <div style={{ fontSize:15, fontWeight:900 }}>{fmt(totalFor(w))}</div>
-          <div style={{ fontSize:9, color:"#aaa", marginTop:2 }}>{w.length} bill{w.length !== 1 ? "s" : ""}</div>
+    <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+      {["1–7","8–14","15–21","22–31"].map((l, i) => (
+        <div key={i} style={{ flex:1, background:"#fff", borderRadius:10, padding:"9px 8px", textAlign:"center", border:"1px solid #eee" }}>
+          <div style={{ fontSize:9, color:"#888", fontWeight:700, marginBottom:3 }}>{l}</div>
+          <div style={{ fontSize:14, fontWeight:900 }}>{fmt(totalFor(weeks[i]))}</div>
+          <div style={{ fontSize:9, color:"#aaa", marginTop:1 }}>{weeks[i].length} bill{weeks[i].length !== 1 ? "s" : ""}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── DAY DETAIL PANEL ─────────────────────────────────────────────────────────
+function DayDetail({ day, month, year, bills, sheetData, onUpdateVariable, onEditCategory, onClose }) {
+  if (!day || !bills.length) return null;
+  const covered = cardCoveredTotal(bills);
+  return (
+    <div style={{ background:"#fff", borderRadius:12, border:"1px solid #e0e0e0", overflow:"hidden", height:"100%" }}>
+      <div style={{ padding:"14px 16px", background:"#f8f9ff", borderBottom:"1px solid #eee", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ fontWeight:800, fontSize:15 }}>{MONTHS[month]} {ordinal(day)}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ fontWeight:900, fontSize:15, color:"#C92A2A" }}>{fmt(totalFor(bills))} due</div>
+          {onClose && <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", fontSize:18, color:"#aaa", padding:0 }}>×</button>}
+        </div>
+      </div>
+      <div style={{ overflowY:"auto", maxHeight:"calc(100% - 56px)" }}>
+        {bills.map(b => {
+          const m = CATEGORY_META[b.baseCategory || b.category] || CATEGORY_META.fixed;
+          const isCovered = b.category === "cardcovered";
+          const lastUpdated = sheetData?.[b.name]?.lastUpdated;
+          return (
+            <div key={b.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", borderBottom:"1px solid #f5f5f5", opacity: isCovered ? 0.7 : 1 }}>
+              <CategoryIcon bill={b} size={36} />
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:14 }}>
+                  {b.name}
+                  {!b.recurring && <span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700, background:"#FFF9F0", padding:"1px 5px", borderRadius:4 }}>One-time</span>}
+                  {isCovered && <span style={{ marginLeft:6, fontSize:10, color:"#888", fontWeight:600 }}>via card</span>}
+                </div>
+                <div style={{ fontSize:11, color:"#888", marginTop:1 }}>
+                  {m.label}
+                  {lastUpdated && <span style={{ marginLeft:6, color:"#5C940D" }}>· {formatSheetDate(lastUpdated)}</span>}
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                {b.variable && !b.amount && !isCovered ? (
+                  <button onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:6, padding:"6px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>Update</button>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <div style={{ fontWeight:900, fontSize:15, color: isCovered ? "#999" : "#1a1a1a" }}>{fmt(b.amount)}</div>
+                    {!isCovered && <button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"3px 7px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>}
+                  </div>
+                )}
+                <button onClick={() => onEditCategory(b)} style={{ background:"none", border:"none", cursor:"pointer", padding:"3px", fontSize:14, opacity:0.4 }}>🏷</button>
+              </div>
+            </div>
+          );
+        })}
+        {covered > 0 && (
+          <div style={{ padding:"10px 16px", background:"#f8f8f8", fontSize:11, color:"#999" }}>
+            🔗 {fmt(covered)} paid by card, not counted in total
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -283,7 +356,6 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
   const offset = firstDay(year, month);
   const cells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
-  const total = totalFor(allBills);
   const monthName = MONTHS[month];
   const fileName = `PredictaBill-${monthName}-${year}`;
 
@@ -294,24 +366,18 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
         <div style={{ fontSize:12, color:"#888" }}>{fileName}</div>
         <button onClick={() => { document.title = fileName; window.print(); }} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>🖨 Print / PDF</button>
       </div>
-      <style>{`
-        @media print {
-          .no-print { display:none !important; }
-          @page { size: 11in 8.5in; margin: 0.35in; }
-        }
-      `}</style>
+      <style>{`@media print { .no-print { display:none !important; } @page { size: 11in 8.5in; margin: 0.35in; } }`}</style>
       <div style={{ padding:"20px", maxWidth:1050, margin:"0 auto", fontFamily:"-apple-system, sans-serif", color:"#1a1a1a" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", borderBottom:"3px solid #1a1a1a", paddingBottom:10, marginBottom:14 }}>
           <div>
-            <div style={{ fontSize:11, fontWeight:900, color:"#3B5BDB", letterSpacing:"-0.3px" }}>PredictaBill</div>
+            <div style={{ fontSize:11, fontWeight:900, color:"#3B5BDB" }}>PredictaBill</div>
             <div style={{ fontSize:26, fontWeight:900, letterSpacing:"-0.5px" }}>{monthName} {year}</div>
           </div>
           <div style={{ textAlign:"right" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:"#C92A2A" }}>Total: {fmt(total)}</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#C92A2A" }}>Total: {fmt(totalFor(allBills))}</div>
             <div style={{ fontSize:10, color:"#aaa", marginTop:2 }}>🔗 = paid by card, excluded</div>
           </div>
         </div>
-
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1.5, border:"1.5px solid #ccc", background:"#ccc", borderRadius:6, overflow:"hidden" }}>
           {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(d => (
             <div key={d} style={{ background:"#1a1a1a", padding:"7px 4px", textAlign:"center", fontSize:10, fontWeight:700, color:"#fff", letterSpacing:"0.04em" }}>{d}</div>
@@ -319,45 +385,39 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
           {cells.map((d, i) => {
             const dayBills = d ? (billsByDay[d] || []) : [];
             const dayTotal = totalFor(dayBills);
-            const isToday = d === TODAY.getDate() && month === TODAY.getMonth() && year === TODAY.getFullYear();
+            const todayFlag = d === TODAY.getDate() && month === TODAY.getMonth() && year === TODAY.getFullYear();
             return (
-              <div key={i} style={{ background: isToday ? "#f0f4ff" : "#fff", minHeight:100, padding:"5px 6px", borderLeft: isToday ? "2px solid #3B5BDB" : "none" }}>
+              <div key={i} style={{ background: todayFlag ? "#f0f4ff" : "#fff", minHeight:100, padding:"5px 6px", borderLeft: todayFlag ? "2px solid #3B5BDB" : "none" }}>
                 {d && (
                   <div>
-                    <div style={{ fontWeight: isToday ? 900 : 600, fontSize:12, color: isToday ? "#3B5BDB" : "#333", marginBottom:4 }}>{d}</div>
+                    <div style={{ fontWeight: todayFlag ? 900 : 600, fontSize:12, color: todayFlag ? "#3B5BDB" : "#333", marginBottom:4 }}>{d}</div>
                     {dayBills.map(b => {
                       const isCovered = b.category === "cardcovered";
-                      const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
+                      const m = CATEGORY_META[b.baseCategory || b.category] || CATEGORY_META.fixed;
                       return (
-                        <div key={b.id} style={{ fontSize:9.5, fontWeight:600, marginBottom:2, color: m.color, display:"flex", alignItems:"baseline", gap:3, opacity: isCovered ? 0.5 : 1 }}>
-                          <span style={{ width:6, height:6, borderRadius:"50%", background:m.color, display:"inline-block", flexShrink:0, marginTop:1, opacity: isCovered ? 0.5 : 1 }} />
-                          <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"90%" }}>
-                            {isCovered ? "🔗" : ""}{b.name.split(" ").slice(0, 2).join(" ")} {b.amount ? fmt(b.amount) : "TBD"}
+                        <div key={b.id} style={{ fontSize:9.5, fontWeight:600, marginBottom:2, color:m.color, display:"flex", alignItems:"baseline", gap:3, opacity: isCovered ? 0.5 : 1 }}>
+                          <span style={{ width:6, height:6, borderRadius:"50%", background:m.color, display:"inline-block", flexShrink:0 }} />
+                          <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"85%" }}>
+                            {isCovered ? "🔗 " : ""}{b.name.split(" ").slice(0,2).join(" ")} {b.amount ? fmt(b.amount) : "TBD"}
                           </span>
                         </div>
                       );
                     })}
-                    {dayTotal > 0 && (
-                      <div style={{ fontSize:9, fontWeight:900, borderTop:"1px solid #eee", marginTop:3, paddingTop:2, color:"#C92A2A", textAlign:"right" }}>
-                        {fmt(dayTotal)}
-                      </div>
-                    )}
+                    {dayTotal > 0 && <div style={{ fontSize:9, fontWeight:900, borderTop:"1px solid #eee", marginTop:3, paddingTop:2, color:"#C92A2A", textAlign:"right" }}>{fmt(dayTotal)}</div>}
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-
-        <div style={{ display:"flex", gap:16, marginTop:12, flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ display:"flex", gap:14, marginTop:12, flexWrap:"wrap", alignItems:"center" }}>
           {Object.entries(CATEGORY_META).map(([k, v]) => (
             <span key={k} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:v.color }}>
               <span style={{ width:8, height:8, borderRadius:"50%", background:v.color, display:"inline-block" }} />{v.label}
             </span>
           ))}
         </div>
-
-        <div style={{ marginTop:14, display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
+        <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
           {["Week 1 · 1–7","Week 2 · 8–14","Week 3 · 15–21","Week 4 · 22–31"].map((l, i) => {
             const w = allBills.filter(b => b.category !== "cardcovered" && Math.min(Math.floor((b.day-1)/7),3) === i);
             return (
@@ -369,8 +429,7 @@ function CalendarPrintPage({ allBills, year, month, onDone }) {
             );
           })}
         </div>
-
-        <div style={{ borderTop:"1px solid #eee", marginTop:14, paddingTop:8, display:"flex", justifyContent:"space-between", fontSize:9, color:"#aaa" }}>
+        <div style={{ borderTop:"1px solid #eee", marginTop:12, paddingTop:8, display:"flex", justifyContent:"space-between", fontSize:9, color:"#aaa" }}>
           <span>PredictaBill · {monthName} {year} · Forward-looking forecast</span>
           <span>Printed {new Date().toLocaleDateString()}</span>
         </div>
@@ -398,58 +457,45 @@ function ListPrintPage({ allBills, year, month, onDone }) {
         <div style={{ fontSize:12, color:"#888" }}>{fileName}</div>
         <button onClick={() => { document.title = fileName; window.print(); }} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>🖨 Print / PDF</button>
       </div>
-      <style>{`
-        @media print {
-          .no-print { display:none !important; }
-          @page { size: 8.5in 11in; margin: 0.6in; }
-        }
-      `}</style>
-      <div style={{ padding:"24px 24px", maxWidth:760, margin:"0 auto", fontFamily:"Georgia, serif", color:"#1a1a1a", fontSize:13, lineHeight:1.6 }}>
+      <style>{`@media print { .no-print { display:none !important; } @page { size: 8.5in 11in; margin: 0.6in; } }`}</style>
+      <div style={{ padding:"24px", maxWidth:760, margin:"0 auto", fontFamily:"Georgia, serif", color:"#1a1a1a", fontSize:13, lineHeight:1.6 }}>
         <div style={{ borderBottom:"3px solid #1a1a1a", paddingBottom:12, marginBottom:20 }}>
           <div style={{ fontSize:12, fontWeight:900, color:"#3B5BDB", marginBottom:2 }}>PredictaBill</div>
           <div style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px" }}>{monthName} {year}</div>
           <div style={{ fontSize:11, color:"#777", marginTop:2 }}>Monthly Cash Flow Forecast · Outgoing payments only</div>
         </div>
-
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
-          {[
-            ["Total Outgoing", fmt(total), "#C92A2A"],
-            ["Fixed Bills", fmt(totalFor(sorted.filter(b => b.category !== "credit" && b.category !== "cardcovered"))), "#3B5BDB"],
-            ["Credit Cards", fmt(totalFor(sorted.filter(b => b.category === "credit"))), "#C92A2A"],
-            ["Paid by Card", covered > 0 ? fmt(covered) + " excl." : "—", "#888"],
-          ].map(([l, v, c]) => (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
+          {[["Total Outgoing",fmt(total),"#C92A2A"],["Fixed",fmt(totalFor(sorted.filter(b=>b.category!=="credit"&&b.category!=="cardcovered"))),"#3B5BDB"],["Credit Cards",fmt(totalFor(sorted.filter(b=>b.category==="credit"))),"#C92A2A"],["Paid by Card",covered>0?fmt(covered)+" excl.":"—","#888"]].map(([l,v,c])=>(
             <div key={l} style={{ border:"1px solid #ddd", borderRadius:6, padding:"10px 12px" }}>
               <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"#888", marginBottom:3 }}>{l}</div>
               <div style={{ fontSize:18, fontWeight:900, color:c }}>{v}</div>
             </div>
           ))}
         </div>
-
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20, pageBreakInside:"avoid" }}>
-          {["Week 1 · 1–7","Week 2 · 8–14","Week 3 · 15–21","Week 4 · 22–31"].map((l, i) => (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
+          {["Week 1 · 1–7","Week 2 · 8–14","Week 3 · 15–21","Week 4 · 22–31"].map((l,i)=>(
             <div key={i} style={{ border:"1px solid #ddd", borderRadius:6, padding:"10px 12px" }}>
               <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"#888", marginBottom:3 }}>{l}</div>
               <div style={{ fontSize:18, fontWeight:900 }}>{fmt(totalFor(weeks[i]))}</div>
-              <div style={{ fontSize:9, color:"#aaa", marginTop:1 }}>{weeks[i].length} payment{weeks[i].length !== 1 ? "s" : ""}</div>
+              <div style={{ fontSize:9, color:"#aaa", marginTop:1 }}>{weeks[i].length} payment{weeks[i].length!==1?"s":""}</div>
             </div>
           ))}
         </div>
-
-        <div style={{ borderTop:"1px solid #ddd", paddingTop:6, marginBottom:4, fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888" }}>All Bills · Chronological</div>
+        <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#888", borderBottom:"1px solid #ddd", paddingBottom:5, marginBottom:6 }}>All Bills · Chronological</div>
         {sorted.map(b => {
           const isCovered = b.category === "cardcovered";
-          const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
+          const m = CATEGORY_META[b.baseCategory||b.category]||CATEGORY_META.fixed;
           return (
-            <div key={b.id} style={{ display:"flex", padding:"6px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8, opacity: isCovered ? 0.5 : 1 }}>
+            <div key={b.id} style={{ display:"flex", padding:"6px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8, opacity: isCovered?0.5:1 }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background:m.color, display:"inline-block", flexShrink:0 }} />
               <div style={{ width:44, fontSize:11, fontWeight:800, flexShrink:0, color:m.color }}>{ordinal(b.day)}</div>
               <div style={{ flex:1, fontWeight:600, fontSize:12 }}>
-                {isCovered ? "🔗 " : ""}{b.name}
-                {!b.recurring && <span style={{ marginLeft:6, fontSize:9, color:"#E67700", fontWeight:700 }}>(one-time)</span>}
-                {b.variable && !b.amount && <span style={{ marginLeft:4, fontSize:9, color:"#E67700", fontWeight:700 }}>est.</span>}
+                {isCovered?"🔗 ":""}{b.name}
+                {!b.recurring&&<span style={{ marginLeft:6, fontSize:9, color:"#E67700", fontWeight:700 }}>(one-time)</span>}
+                {b.variable&&!b.amount&&<span style={{ marginLeft:4, fontSize:9, color:"#E67700" }}>est.</span>}
               </div>
-              <div style={{ fontWeight:800, fontSize:13, flexShrink:0, color: isCovered ? "#999" : "#1a1a1a" }}>
-                {b.amount ? fmt(b.amount) : <span style={{ color:"#E67700", fontSize:10 }}>TBD</span>}
+              <div style={{ fontWeight:800, fontSize:13, flexShrink:0, color:isCovered?"#999":"#1a1a1a" }}>
+                {b.amount?fmt(b.amount):<span style={{ color:"#E67700", fontSize:10 }}>TBD</span>}
               </div>
             </div>
           );
@@ -457,8 +503,7 @@ function ListPrintPage({ allBills, year, month, onDone }) {
         <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop:"2px solid #1a1a1a", marginTop:4, fontWeight:900, fontSize:14 }}>
           <span>TOTAL (excl. paid by card)</span><span>{fmt(total)}</span>
         </div>
-        {covered > 0 && <div style={{ fontSize:10, color:"#999", paddingTop:4 }}>🔗 {fmt(covered)} in card-covered items shown for reference, not included in total</div>}
-
+        {covered>0&&<div style={{ fontSize:10, color:"#999", paddingTop:4 }}>🔗 {fmt(covered)} card-covered items shown for reference, excluded from total</div>}
         <div style={{ borderTop:"1px solid #eee", marginTop:20, paddingTop:8, display:"flex", justifyContent:"space-between", fontSize:9, color:"#aaa" }}>
           <span>PredictaBill · {monthName} {year}</span>
           <span>Printed {new Date().toLocaleDateString()}</span>
@@ -469,8 +514,9 @@ function ListPrintPage({ allBills, year, month, onDone }) {
 }
 
 // ─── CALENDAR VIEW ────────────────────────────────────────────────────────────
-function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory, onPrint, sheetData }) {
+function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory, sheetData }) {
   const [selectedDay, setSelectedDay] = useState(null);
+  const isDesktop = window.innerWidth >= 768;
 
   const billsByDay = useMemo(() => {
     const map = {};
@@ -481,108 +527,79 @@ function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory,
   const days = daysInMonth(year, month);
   const offset = firstDay(year, month);
   const cells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
-  const isToday = d => d === TODAY.getDate() && month === TODAY.getMonth() && year === TODAY.getFullYear();
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const isTodayCell = d => d === TODAY.getDate() && isCurrentMonth(year, month);
   const isPast = d => new Date(year, month, d) < new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
   const estimated = allBills.filter(b => b.variable && !b.amount && b.category !== "cardcovered");
+  const selectedBills = selectedDay ? (billsByDay[selectedDay] || []) : [];
+
+  const grid = (
+    <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
+      <div style={{ minWidth:350 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, borderRadius:10, overflow:"hidden", border:"1px solid #e0e0e0", background:"#e0e0e0" }}>
+          {["S","M","T","W","T","F","S"].map((d,i) => (
+            <div key={i} style={{ background:"#f5f5f5", padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#666" }}>{d}</div>
+          ))}
+          {cells.map((d, i) => {
+            if (!d) return <div key={i} style={{ background:"#fafafa", minHeight:78 }} />;
+            const dayBills = billsByDay[d] || [];
+            const dayTotal = totalFor(dayBills);
+            const selected = selectedDay === d;
+            const hasUnknown = dayBills.filter(b => b.category !== "cardcovered").some(b => b.variable && !b.amount);
+            return (
+              <div key={d} onClick={() => setSelectedDay(selected ? null : d)}
+                style={{ background: selected ? "#EDF2FF" : "#fff", minHeight:78, padding:"5px 4px", cursor: dayBills.length ? "pointer" : "default", borderLeft: selected ? "3px solid #3B5BDB" : "3px solid transparent", opacity: isPast(d) ? 0.5 : 1 }}>
+                <div style={{ fontSize:11, fontWeight: isTodayCell(d) ? 900 : 500, color: isTodayCell(d) ? "#fff" : "#333", background: isTodayCell(d) ? "#3B5BDB" : "transparent", borderRadius:"50%", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:3 }}>{d}</div>
+                {dayBills.slice(0, 2).map(b => {
+                  const m = CATEGORY_META[b.baseCategory||b.category]||CATEGORY_META.fixed;
+                  const isCovered = b.category === "cardcovered";
+                  return (
+                    <div key={b.id} style={{ background:m.bg, color:m.color, borderRadius:3, padding:"1px 4px", marginBottom:2, fontSize:9, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", opacity: isCovered?0.6:1 }}>
+                      {isCovered?"🔗 ":""}{b.variable&&!b.amount?"?":""}{b.name.split(" ")[0]} {b.amount?fmt(b.amount):""}
+                    </div>
+                  );
+                })}
+                {dayBills.length > 2 && <div style={{ fontSize:8, color:"#aaa" }}>+{dayBills.length-2}</div>}
+                {dayTotal > 0 && <div style={{ fontSize:9, fontWeight:900, color:hasUnknown?"#E67700":"#333", textAlign:"right" }}>{fmt(dayTotal)}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div>
       <SummaryStrip allBills={allBills} />
-
       {estimated.length > 0 && (
-        <div style={{ background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
+        <div style={{ background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#E67700", marginBottom:6 }}>Tap to update variable bills:</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {estimated.map(b => (
-              <button key={b.id} onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>
-                + {b.name}
-              </button>
+              <button key={b.id} onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>+ {b.name}</button>
             ))}
           </div>
         </div>
       )}
-
       {sheetData && Object.keys(sheetData).length > 0 && (
-        <div style={{ background:"#F4FCE3", border:"1px solid #C5E8A0", borderRadius:10, padding:"8px 14px", marginBottom:14, fontSize:11, color:"#5C940D", fontWeight:600 }}>
-          ● Auto-updated: {Object.entries(sheetData).filter(([,v]) => v.amount).map(([k, v]) => `${k} ${fmt(v.amount)}`).join(" · ")}
+        <div style={{ background:"#F4FCE3", border:"1px solid #C5E8A0", borderRadius:10, padding:"8px 14px", marginBottom:12, fontSize:11, color:"#5C940D", fontWeight:600 }}>
+          ● Auto-updated: {Object.entries(sheetData).filter(([,v])=>v.amount).map(([k,v])=>`${k} ${fmt(v.amount)}`).join(" · ")}
         </div>
       )}
 
-      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", marginBottom:12 }}>
-        <div style={{ minWidth:420 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, borderRadius:10, overflow:"hidden", border:"1px solid #e0e0e0", background:"#e0e0e0" }}>
-            {["S","M","T","W","T","F","S"].map((d, i) => (
-              <div key={i} style={{ background:"#f5f5f5", padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#666" }}>{d}</div>
-            ))}
-            {cells.map((d, i) => {
-              if (!d) return <div key={i} style={{ background:"#fafafa", minHeight:80 }} />;
-              const dayBills = billsByDay[d] || [];
-              const dayTotal = totalFor(dayBills);
-              const selected = selectedDay === d;
-              const hasUnknown = dayBills.filter(b => b.category !== "cardcovered").some(b => b.variable && !b.amount);
-              return (
-                <div key={d} onClick={() => setSelectedDay(selected ? null : d)}
-                  style={{ background: selected ? "#EDF2FF" : "#fff", minHeight:80, padding:"5px 4px", cursor: dayBills.length ? "pointer" : "default", borderLeft: selected ? "3px solid #3B5BDB" : "3px solid transparent", opacity: isPast(d) ? 0.5 : 1 }}>
-                  <div style={{ fontSize:11, fontWeight: isToday(d) ? 900 : 500, color: isToday(d) ? "#fff" : "#333", background: isToday(d) ? "#3B5BDB" : "transparent", borderRadius:"50%", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:3 }}>{d}</div>
-                  {dayBills.slice(0, 2).map(b => {
-                    const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
-                    const isCovered = b.category === "cardcovered";
-                    return (
-                      <div key={b.id} style={{ background:m.bg, color:m.color, borderRadius:3, padding:"1px 4px", marginBottom:2, fontSize:9, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", opacity: isCovered ? 0.55 : 1 }}>
-                        {isCovered ? "🔗 " : ""}{b.variable && !b.amount ? "?" : ""}{b.name.split(" ")[0]} {b.amount ? fmt(b.amount) : ""}
-                      </div>
-                    );
-                  })}
-                  {dayBills.length > 2 && <div style={{ fontSize:8, color:"#aaa" }}>+{dayBills.length - 2}</div>}
-                  {dayTotal > 0 && <div style={{ fontSize:9, fontWeight:900, color: hasUnknown ? "#E67700" : "#333", textAlign:"right" }}>{fmt(dayTotal)}</div>}
-                </div>
-              );
-            })}
-          </div>
+      {isDesktop && selectedDay && selectedBills.length > 0 ? (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:16, alignItems:"start" }}>
+          <div>{grid}</div>
+          <DayDetail day={selectedDay} month={month} year={year} bills={selectedBills} sheetData={sheetData} onUpdateVariable={onUpdateVariable} onEditCategory={onEditCategory} onClose={() => setSelectedDay(null)} />
         </div>
-      </div>
-
-      {selectedDay && (
-        <div style={{ marginTop:4, background:"#fff", borderRadius:10, border:"1px solid #e0e0e0", overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px", background:"#f8f9ff", borderBottom:"1px solid #eee", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontWeight:800, fontSize:15 }}>{MONTHS[month]} {ordinal(selectedDay)}</div>
-            <div style={{ fontWeight:900, fontSize:15, color:"#C92A2A" }}>{fmt(totalFor(billsByDay[selectedDay] || []))} due</div>
-          </div>
-          {(billsByDay[selectedDay] || []).map(b => {
-            const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
-            const isCovered = b.category === "cardcovered";
-            const lastUpdated = sheetData?.[b.name]?.lastUpdated;
-            return (
-              <div key={b.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", borderBottom:"1px solid #f5f5f5", opacity: isCovered ? 0.65 : 1 }}>
-                <span style={{ fontSize:18 }}>{m.icon}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700, fontSize:14 }}>
-                    {b.name}
-                    {!b.recurring && <span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700, background:"#FFF9F0", padding:"1px 5px", borderRadius:4 }}>One-time</span>}
-                    {isCovered && <span style={{ marginLeft:6, fontSize:10, color:"#888", fontWeight:600 }}>via card</span>}
-                  </div>
-                  <div style={{ fontSize:11, color:"#888" }}>
-                    {m.label}
-                    {lastUpdated && <span style={{ marginLeft:8, color:"#5C940D" }}>· Updated {formatSheetDate(lastUpdated)}</span>}
-                  </div>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  {b.variable && !b.amount && !isCovered ? (
-                    <button onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:6, padding:"6px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>Update</button>
-                  ) : (
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <div style={{ fontWeight:900, fontSize:16, color: isCovered ? "#999" : "#1a1a1a" }}>{fmt(b.amount)}</div>
-                      {!isCovered && <button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"4px 8px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>}
-                    </div>
-                  )}
-                  <button onClick={() => onEditCategory(b)} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px", fontSize:15, opacity:0.45 }}>🏷</button>
-                </div>
-              </div>
-            );
-          })}
-          {cardCoveredTotal(billsByDay[selectedDay] || []) > 0 && (
-            <div style={{ padding:"8px 16px", background:"#f8f8f8", fontSize:11, color:"#999" }}>
-              🔗 {fmt(cardCoveredTotal(billsByDay[selectedDay] || []))} paid by card, not counted in total
+      ) : (
+        <div>
+          {grid}
+          {selectedDay && selectedBills.length > 0 && (
+            <div style={{ marginTop:10 }}>
+              <DayDetail day={selectedDay} month={month} year={year} bills={selectedBills} sheetData={sheetData} onUpdateVariable={onUpdateVariable} onEditCategory={onEditCategory} onClose={() => setSelectedDay(null)} />
             </div>
           )}
         </div>
@@ -595,49 +612,49 @@ function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory,
 function ListView({ allBills, year, month, onUpdateVariable, onEditCategory, sheetData }) {
   const [reviewMode, setReviewMode] = useState(false);
   const sorted = [...allBills].sort((a, b) => a.day - b.day);
-  const isCurrentMonth = month === TODAY.getMonth() && year === TODAY.getFullYear();
+  const isCurMonth = isCurrentMonth(year, month);
   const todayDate = TODAY.getDate();
-  const upcoming = sorted.filter(b => !isCurrentMonth || b.day >= todayDate);
-  const past = sorted.filter(b => isCurrentMonth && b.day < todayDate);
+  const upcoming = sorted.filter(b => !isCurMonth || b.day >= todayDate);
+  const past = sorted.filter(b => isCurMonth && b.day < todayDate);
 
   function BillRow({ b }) {
-    const m = CATEGORY_META[b.category] || CATEGORY_META.fixed;
+    const m = CATEGORY_META[b.baseCategory||b.category]||CATEGORY_META.fixed;
     const isCovered = b.category === "cardcovered";
     const needsUpdate = b.variable && !b.amount && !isCovered;
     const lastUpdated = sheetData?.[b.name]?.lastUpdated;
 
     if (reviewMode) {
       return (
-        <div style={{ display:"flex", padding:"8px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8, opacity: isCovered ? 0.5 : 1 }}>
+        <div style={{ display:"flex", padding:"8px 0", borderBottom:"1px solid #f0f0f0", alignItems:"center", gap:8, opacity:isCovered?0.5:1 }}>
           <span style={{ width:7, height:7, borderRadius:"50%", background:m.color, display:"inline-block", flexShrink:0 }} />
-          <div style={{ width:44, fontWeight:800, fontSize:13, flexShrink:0, color:"#1a1a1a" }}>{b.day}</div>
+          <div style={{ width:42, fontWeight:800, fontSize:13, flexShrink:0 }}>{b.day}</div>
           <div style={{ flex:1, fontWeight:600, fontSize:14 }}>
-            {isCovered ? "🔗 " : ""}{b.name}
-            {!b.recurring && <span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700 }}>1x</span>}
+            {isCovered?"🔗 ":""}{b.name}
+            {!b.recurring&&<span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700 }}>1x</span>}
           </div>
-          <div style={{ fontWeight:900, fontSize:15, color: isCovered ? "#999" : "#1a1a1a" }}>
-            {b.amount ? fmt(b.amount) : <span style={{ fontSize:11, color:"#E67700" }}>TBD</span>}
+          <div style={{ fontWeight:900, fontSize:15, color:isCovered?"#999":"#1a1a1a" }}>
+            {b.amount?fmt(b.amount):<span style={{ fontSize:11, color:"#E67700" }}>TBD</span>}
           </div>
         </div>
       );
     }
 
     return (
-      <div style={{ background:"#fff", borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10, border:`1px solid ${needsUpdate ? "#FFE8CC" : "#eee"}`, opacity: isCovered ? 0.65 : 1 }}>
-        <div style={{ width:42, textAlign:"center", flexShrink:0 }}>
-          <div style={{ fontWeight:900, fontSize:18, color: isCovered ? "#999" : "#1a1a1a", lineHeight:1 }}>{b.day}</div>
-          <div style={{ fontSize:9, fontWeight:700, color:"#999", textTransform:"uppercase" }}>{MONTHS[month].slice(0, 3)}</div>
+      <div style={{ background:"#fff", borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10, border:`1px solid ${needsUpdate?"#FFE8CC":"#eee"}`, opacity:isCovered?0.7:1 }}>
+        <div style={{ width:40, textAlign:"center", flexShrink:0 }}>
+          <div style={{ fontWeight:900, fontSize:17, color:isCovered?"#999":"#1a1a1a", lineHeight:1 }}>{b.day}</div>
+          <div style={{ fontSize:9, fontWeight:700, color:"#999", textTransform:"uppercase" }}>{MONTHS[month].slice(0,3)}</div>
         </div>
-        <div style={{ width:36, height:36, borderRadius:8, background:m.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{m.icon}</div>
+        <CategoryIcon bill={b} size={36} />
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:700, fontSize:14 }}>
             {b.name}
-            {!b.recurring && <span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700, background:"#FFF9F0", padding:"1px 5px", borderRadius:4 }}>One-time</span>}
-            {isCovered && <span style={{ marginLeft:6, fontSize:10, color:"#888", fontWeight:600 }}>via card</span>}
+            {!b.recurring&&<span style={{ marginLeft:6, fontSize:10, color:"#E67700", fontWeight:700, background:"#FFF9F0", padding:"1px 5px", borderRadius:4 }}>One-time</span>}
+            {isCovered&&<span style={{ marginLeft:6, fontSize:10, color:"#888", fontWeight:600 }}>via card</span>}
           </div>
           <div style={{ fontSize:11, color:"#888", marginTop:1 }}>
-            {isCovered ? "Paid by card · excluded from total" : m.label}
-            {lastUpdated && !isCovered && <span style={{ marginLeft:6, color:"#5C940D" }}>· {formatSheetDate(lastUpdated)}</span>}
+            {isCovered?"Paid by card · excluded from total":m.label}
+            {lastUpdated&&!isCovered&&<span style={{ marginLeft:6, color:"#5C940D" }}>· {formatSheetDate(lastUpdated)}</span>}
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -645,8 +662,8 @@ function ListView({ allBills, year, month, onUpdateVariable, onEditCategory, she
             <button onClick={() => onUpdateVariable(b)} style={{ background:"#E67700", color:"#fff", border:"none", borderRadius:8, padding:"7px 12px", fontWeight:700, fontSize:12, cursor:"pointer" }}>+ Add</button>
           ) : (
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <div style={{ fontWeight:900, fontSize:15, color: isCovered ? "#999" : "#1a1a1a" }}>{fmt(b.amount)}</div>
-              {!isCovered && <button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"3px 7px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>}
+              <div style={{ fontWeight:900, fontSize:15, color:isCovered?"#999":"#1a1a1a" }}>{fmt(b.amount)}</div>
+              {!isCovered&&<button onClick={() => onUpdateVariable(b)} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"3px 7px", fontSize:11, cursor:"pointer", color:"#888", fontWeight:600 }}>Edit</button>}
             </div>
           )}
           <button onClick={() => onEditCategory(b)} style={{ background:"none", border:"none", cursor:"pointer", padding:"3px", fontSize:14, opacity:0.4 }}>🏷</button>
@@ -659,18 +676,13 @@ function ListView({ allBills, year, month, onUpdateVariable, onEditCategory, she
     <div>
       <SummaryStrip allBills={allBills} />
       <WeekSummary allBills={allBills} />
-
       <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
         <div style={{ display:"flex", background:"#f0f0f0", borderRadius:8, padding:3, gap:2 }}>
-          <button onClick={() => setReviewMode(false)} style={{ padding:"6px 14px", borderRadius:6, border:"none", background: !reviewMode ? "#fff" : "transparent", fontWeight: !reviewMode ? 700 : 500, fontSize:12, cursor:"pointer", color: !reviewMode ? "#3B5BDB" : "#666", boxShadow: !reviewMode ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>
-            Edit
-          </button>
-          <button onClick={() => setReviewMode(true)} style={{ padding:"6px 14px", borderRadius:6, border:"none", background: reviewMode ? "#fff" : "transparent", fontWeight: reviewMode ? 700 : 500, fontSize:12, cursor:"pointer", color: reviewMode ? "#3B5BDB" : "#666", boxShadow: reviewMode ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>
-            Review
-          </button>
+          {[["Edit",false],["Review",true]].map(([label,mode]) => (
+            <button key={label} onClick={() => setReviewMode(mode)} style={{ padding:"6px 14px", borderRadius:6, border:"none", background:reviewMode===mode?"#fff":"transparent", fontWeight:reviewMode===mode?700:500, fontSize:12, cursor:"pointer", color:reviewMode===mode?"#3B5BDB":"#666", boxShadow:reviewMode===mode?"0 1px 3px rgba(0,0,0,0.1)":"none" }}>{label}</button>
+          ))}
         </div>
       </div>
-
       {reviewMode ? (
         <div style={{ background:"#fff", borderRadius:10, border:"1px solid #eee", padding:"14px 16px" }}>
           {sorted.map(b => <BillRow key={b.id} b={b} />)}
@@ -682,9 +694,7 @@ function ListView({ allBills, year, month, onUpdateVariable, onEditCategory, she
         <div>
           {upcoming.length > 0 && (
             <div>
-              <div style={{ fontSize:11, fontWeight:800, color:"#888", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>
-                {isCurrentMonth ? "Upcoming" : "All Bills"}
-              </div>
+              <div style={{ fontSize:11, fontWeight:800, color:"#888", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>{isCurMonth?"Upcoming":"All Bills"}</div>
               {upcoming.map(b => <BillRow key={b.id} b={b} />)}
             </div>
           )}
@@ -706,7 +716,7 @@ export default function App() {
   const [year, setYear] = useState(TODAY.getFullYear());
   const [month, setMonth] = useState(TODAY.getMonth());
   const [view, setView] = useState("calendar");
-  const [printMode, setPrintMode] = useState(null); // "calendar" | "list"
+  const [printMode, setPrintMode] = useState(null);
 
   const stored = useMemo(() => loadStorage(), []);
   const [variableAmounts, setVariableAmounts] = useState(stored.variableAmounts || {});
@@ -721,6 +731,8 @@ export default function App() {
   const [sheetStatus, setSheetStatus] = useState("loading");
 
   const monthKey = `${year}-${month}`;
+  const onCurrentMonth = isCurrentMonth(year, month);
+  const isFuture = new Date(year, month, 1) > new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
 
   useEffect(() => {
     saveStorage({ variableAmounts, fixedOverrides, categoryOverrides, extraBills });
@@ -739,11 +751,12 @@ export default function App() {
       ...b, variable: false,
       amount: fixedOverrides[b.id] ?? b.amount,
       category: categoryOverrides[b.id] ?? b.category,
+      baseCategory: b.category,
     }));
     const variable = VARIABLE_BILLS.map(b => {
       const sheetAmount = sheetData[b.name]?.amount;
       const manualAmount = variableAmounts[`${monthKey}-${b.id}`];
-      return { ...b, variable: true, amount: manualAmount || sheetAmount || 0, category: categoryOverrides[b.id] ?? b.category };
+      return { ...b, variable: true, amount: manualAmount || sheetAmount || 0, category: categoryOverrides[b.id] ?? b.category, baseCategory: b.category };
     });
     const extra = extraBills
       .filter(b => b.recurring || b.monthKey === monthKey)
@@ -752,24 +765,18 @@ export default function App() {
   }, [variableAmounts, fixedOverrides, categoryOverrides, extraBills, monthKey, sheetData]);
 
   function saveAmount(bill, amount) {
-    if (!bill.variable) {
-      setFixedOverrides(f => ({ ...f, [bill.id]: amount }));
-    } else {
-      setVariableAmounts(v => ({ ...v, [`${monthKey}-${bill.id}`]: amount }));
-    }
+    if (!bill.variable) { setFixedOverrides(f => ({ ...f, [bill.id]: amount })); }
+    else { setVariableAmounts(v => ({ ...v, [`${monthKey}-${bill.id}`]: amount })); }
     setUpdatingBill(null);
   }
-
-  function saveCategory(bill, newCategory) {
-    setCategoryOverrides(c => ({ ...c, [bill.id]: newCategory }));
+  function saveCategory(bill, newCat) {
+    setCategoryOverrides(c => ({ ...c, [bill.id]: newCat }));
     setEditingCategory(null);
   }
-
   function addExtraBill(bill) {
     setExtraBills(bs => [...bs, { ...bill, monthKey }]);
     setShowAddModal(false);
   }
-
   function prevMonth() {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
     else setMonth(m => m - 1);
@@ -778,9 +785,9 @@ export default function App() {
     if (month === 11) { setMonth(0); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   }
+  function goToday() { setMonth(TODAY.getMonth()); setYear(TODAY.getFullYear()); }
 
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />;
-
   if (printMode === "calendar") return <CalendarPrintPage allBills={allBills} year={year} month={month} onDone={() => setPrintMode(null)} />;
   if (printMode === "list") return <ListPrintPage allBills={allBills} year={year} month={month} onDone={() => setPrintMode(null)} />;
 
@@ -790,34 +797,42 @@ export default function App() {
       {editingCategory && <EditCategoryModal bill={editingCategory} onSave={cat => saveCategory(editingCategory, cat)} onClose={() => setEditingCategory(null)} />}
       {showAddModal && <AddBillModal onSave={addExtraBill} onClose={() => setShowAddModal(false)} />}
 
-      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"0 14px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <div style={{ padding:"13px 0", fontWeight:900, fontSize:19, letterSpacing:"-0.5px", flexShrink:0 }}>
+      {/* Top bar: logo + sync status */}
+      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"0 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ padding:"13px 0", fontWeight:900, fontSize:19, letterSpacing:"-0.5px" }}>
           <span style={{ color:"#3B5BDB" }}>Predict</span>aBill
         </div>
-        <div style={{ display:"flex", gap:2, flex:1 }}>
-          {[{ id:"calendar", label:"Calendar" },{ id:"list", label:"List" }].map(t => (
-            <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? "#EDF2FF" : "transparent", color: view === t.id ? "#3B5BDB" : "#666", border:"none", padding:"10px 14px", cursor:"pointer", fontWeight: view === t.id ? 800 : 500, fontSize:13, borderRadius:6 }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <div>
           {sheetStatus === "ok"      && <span style={{ fontSize:11, color:"#5C940D", fontWeight:700 }}>● Live</span>}
           {sheetStatus === "loading" && <span style={{ fontSize:11, color:"#aaa" }}>Syncing…</span>}
           {sheetStatus === "error"   && <span style={{ fontSize:11, color:"#E67700", fontWeight:700 }}>⚠ Offline</span>}
-          <button onClick={() => setPrintMode(view === "calendar" ? "calendar" : "list")} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"7px 12px", fontWeight:700, fontSize:12, cursor:"pointer", color:"#333" }}>🖨 Print</button>
-          <button onClick={() => setShowAddModal(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"7px 12px", fontWeight:700, fontSize:13, cursor:"pointer" }}>+ Add</button>
         </div>
       </div>
 
-      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"9px 14px", display:"flex", alignItems:"center", gap:10 }}>
+      {/* Month navigator */}
+      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"9px 14px", display:"flex", alignItems:"center", justifyContent:"center", gap:12 }}>
         <button onClick={prevMonth} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:14 }}>←</button>
-        <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.3px", flex:1 }}>{MONTHS[month]} {year}</div>
-        <button onClick={() => { setMonth(TODAY.getMonth()); setYear(TODAY.getFullYear()); }} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:12, color:"#3B5BDB", fontWeight:700 }}>Today</button>
+        <div style={{ fontWeight:900, fontSize:17, letterSpacing:"-0.3px", minWidth:160, textAlign:"center" }}>{MONTHS[month]} {year}</div>
         <button onClick={nextMonth} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:14 }}>→</button>
+        {!onCurrentMonth && (
+          <button onClick={goToday} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#3B5BDB", fontWeight:700, padding:"5px 8px" }}>
+            {isFuture ? "← Today" : "Today →"}
+          </button>
+        )}
       </div>
 
-      <div style={{ maxWidth:920, margin:"0 auto", padding:"14px 12px" }}>
+      {/* Action bar: tabs + add + print */}
+      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
+        <div style={{ display:"flex", background:"#f0f0f0", borderRadius:8, padding:3, gap:2, flex:1 }}>
+          {[["calendar","Calendar"],["list","List"]].map(([id,label]) => (
+            <button key={id} onClick={() => setView(id)} style={{ flex:1, padding:"8px 0", borderRadius:6, border:"none", background:view===id?"#fff":"transparent", fontWeight:view===id?800:500, fontSize:13, cursor:"pointer", color:view===id?"#3B5BDB":"#666", boxShadow:view===id?"0 1px 4px rgba(0,0,0,0.1)":"none" }}>{label}</button>
+          ))}
+        </div>
+        <button onClick={() => setShowAddModal(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontWeight:700, fontSize:13, cursor:"pointer" }}>+ Add</button>
+        <button onClick={() => setPrintMode(view === "calendar" ? "calendar" : "list")} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"8px 12px", fontWeight:700, fontSize:13, cursor:"pointer", color:"#333" }}>🖨</button>
+      </div>
+
+      <div style={{ maxWidth:960, margin:"0 auto", padding:"14px 12px" }}>
         {view === "calendar" && <CalendarView allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} onEditCategory={setEditingCategory} sheetData={sheetData} />}
         {view === "list"     && <ListView     allBills={allBills} year={year} month={month} onUpdateVariable={setUpdatingBill} onEditCategory={setEditingCategory} sheetData={sheetData} />}
       </div>
