@@ -4,7 +4,7 @@ const APP_PASSWORD = "$KasowitzFam";
 const SHEET_ID = "1kES2NceZjJX-kAaOH9KivOn78RL9NoCp-DlhF4Me8WU";
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
 // Will be replaced with your Apps Script URL after setup:
-const SCRIPT_URL = "PASTE_SCRIPT_URL_HERE";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxv0IOw6t1cC2G2nNxaPGvzwqVE3pFxXnXpM5dHYQYwWX-abUEvID14pSXQCUhQz4-2sg/exec";
 
 const FIXED_BILLS = [
   { id: 1,  name: "Rent",                  amount: 2640, day: 1,  category: "fixed",   recurring: true },
