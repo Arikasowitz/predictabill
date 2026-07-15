@@ -3,7 +3,6 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 const APP_PASSWORD = "$KasowitzFam";
 const SHEET_ID = "1kES2NceZjJX-kAaOH9KivOn78RL9NoCp-DlhF4Me8WU";
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-// Will be replaced with your Apps Script URL after setup:
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxv0IOw6t1cC2G2nNxaPGvzwqVE3pFxXnXpM5dHYQYwWX-abUEvID14pSXQCUhQz4-2sg/exec";
 
 const FIXED_BILLS = [
@@ -148,23 +147,49 @@ function PasswordGate({ onUnlock }) {
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function UpdateModal({ bill, onSave, onClose }) {
   const [val, setVal] = useState(bill.amount ? String(bill.amount) : "");
+  const [name, setName] = useState(bill.name || "");
+  const [cat, setCat] = useState(bill.category || "fixed");
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
-      <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:340, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div style={{ fontSize:13, fontWeight:700, color:"#888", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>Edit Amount</div>
-        <div style={{ fontSize:20, fontWeight:900, marginBottom:6 }}>{bill.name}</div>
-        {bill.hint && <div style={{ fontSize:12, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"10px 12px", marginBottom:16, lineHeight:1.5 }}>📧 {bill.hint}</div>}
-        {!bill.variable && <div style={{ fontSize:12, color:"#5C940D", background:"#F4FCE3", borderRadius:8, padding:"8px 12px", marginBottom:16 }}>This change will sync across all your devices.</div>}
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24 }}>
-          <span style={{ fontSize:20, fontWeight:700 }}>$</span>
-          <input type="number" placeholder="0.00" value={val}
-            onChange={e => setVal(e.target.value)}
-            onKeyDown={e => { if (e.key==="Enter"&&val) onSave(parseFloat(val)); }}
-            autoFocus style={{ flex:1, padding:"10px 12px", borderRadius:8, border:"2px solid #3B5BDB", fontSize:18, fontWeight:700 }} />
+      <div style={{ background:"#fff", borderRadius:14, padding:28, width:"100%", maxWidth:360, boxShadow:"0 20px 60px rgba(0,0,0,0.2)", maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ fontSize:13, fontWeight:700, color:"#888", marginBottom:16, textTransform:"uppercase", letterSpacing:"0.06em" }}>Edit Bill</div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:4 }}>Bill Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)}
+            style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:"1px solid #ddd", fontSize:14, boxSizing:"border-box" }} />
         </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:4 }}>Amount</label>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:18, fontWeight:700 }}>$</span>
+            <input type="number" placeholder="0.00" value={val}
+              onChange={e => setVal(e.target.value)}
+              onKeyDown={e => { if (e.key==="Enter"&&val) onSave({ amount:parseFloat(val), name, category:cat }); }}
+              style={{ flex:1, padding:"8px 10px", borderRadius:6, border:"1px solid #ddd", fontSize:16, fontWeight:700 }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:20 }}>
+          <label style={{ fontSize:12, fontWeight:700, color:"#555", display:"block", marginBottom:8 }}>Category</label>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            {Object.entries(CATEGORY_META).map(([k, v]) => (
+              <button key={k} onClick={() => setCat(k)} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, border:cat===k?`2px solid ${v.color}`:"2px solid #eee", background:cat===k?v.bg:"#fff", cursor:"pointer", textAlign:"left" }}>
+                <span style={{ fontSize:16 }}>{v.icon}</span>
+                <span style={{ fontWeight:700, fontSize:12, color:cat===k?v.color:"#555" }}>{v.label}</span>
+                {cat===k && <span style={{ marginLeft:"auto", color:v.color, fontSize:12, fontWeight:900 }}>✓</span>}
+              </button>
+            ))}
+          </div>
+          {cat==="cardcovered" && <div style={{ fontSize:11, color:"#888", marginTop:6, padding:"6px 8px", background:"#f8f8f8", borderRadius:6 }}>This bill will appear on the calendar but be excluded from your total.</div>}
+        </div>
+
+        {bill.hint && <div style={{ fontSize:11, color:"#888", background:"#f8f8f8", borderRadius:8, padding:"8px 12px", marginBottom:16, lineHeight:1.5 }}>📧 {bill.hint}</div>}
+
         <div style={{ display:"flex", gap:10 }}>
           <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:8, border:"1px solid #ddd", background:"#f8f8f8", cursor:"pointer", fontWeight:600, fontSize:14 }}>Cancel</button>
-          <button onClick={() => { if (val) onSave(parseFloat(val)); }} style={{ flex:1, padding:10, borderRadius:8, border:"none", background:"#3B5BDB", color:"#fff", cursor:"pointer", fontWeight:800, fontSize:14 }}>Save</button>
+          <button onClick={() => { if (val) onSave({ amount:parseFloat(val), name, category:cat }); }} style={{ flex:1, padding:10, borderRadius:8, border:"none", background:"#3B5BDB", color:"#fff", cursor:"pointer", fontWeight:800, fontSize:14 }}>Save</button>
         </div>
       </div>
     </div>
@@ -250,23 +275,26 @@ function AddBillModal({ onSave, onClose }) {
 
 // ─── SUMMARY STRIP ────────────────────────────────────────────────────────────
 function SummaryStrip({ allBills }) {
+  const pending = allBills.filter(b => b.variable && !b.amount && b.category !== "cardcovered").length;
+  if (pending === 0) return null;
+  return (
+    <div style={{ background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"8px 14px", marginBottom:12 }}>
+      <div style={{ fontSize:10, fontWeight:700, color:"#E67700", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+        {pending} bill{pending!==1?"s":""} need updating
+      </div>
+    </div>
+  );
+}
+
+function SummaryFooter({ allBills }) {
   const total = totalFor(allBills);
   const covered = cardCoveredTotal(allBills);
-  const pending = allBills.filter(b => b.variable && !b.amount && b.category !== "cardcovered").length;
   return (
-    <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"stretch" }}>
-      <div style={{ flex:"2 1 120px", background:"#fff", border:"1px solid #eee", borderRadius:10, padding:"10px 14px" }}>
-        <div style={{ fontSize:9, fontWeight:700, color:"#aaa", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:2 }}>
-          Total Outgoing {covered>0 && <span style={{ color:"#bbb" }}>· {fmt(covered)} via card excl.</span>}
-        </div>
-        <div style={{ fontSize:16, fontWeight:900, color:"#C92A2A" }}>{fmt(total)}</div>
+    <div style={{ marginTop:16, padding:"10px 14px", background:"#fff", borderRadius:10, border:"1px solid #eee", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div style={{ fontSize:11, color:"#aaa", fontWeight:600 }}>
+        Total outgoing {covered>0 && <span>· {fmt(covered)} via card excluded</span>}
       </div>
-      {pending > 0 && (
-        <div style={{ flex:"1 1 80px", background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"10px 14px" }}>
-          <div style={{ fontSize:9, fontWeight:700, color:"#E67700", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:2 }}>Needs Update</div>
-          <div style={{ fontSize:16, fontWeight:900, color:"#E67700" }}>{pending} bill{pending!==1?"s":""}</div>
-        </div>
-      )}
+      <div style={{ fontSize:15, fontWeight:900, color:"#C92A2A" }}>{fmt(total)}</div>
     </div>
   );
 }
@@ -526,7 +554,8 @@ function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory,
   const days = daysInMonth(year, month);
   const offset = firstDay(year, month);
   const cells = [...Array(offset).fill(null), ...Array.from({length:days},(_,i)=>i+1)];
-  while (cells.length%7!==0) cells.push(null);
+  const rem = cells.length % 7;
+  if (rem !== 0) { for (let i = 0; i < 7 - rem; i++) cells.push(null); }
 
   const isTodayCell = d => d===TODAY.getDate()&&isCurrentMonth(year,month);
   const isPast = d => new Date(year,month,d) < new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
@@ -575,7 +604,7 @@ function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory,
 
   return (
     <div>
-      <SummaryStrip allBills={allBills} />
+      <SummaryStrip allBills={allBills} showAtBottom={false} />
       {estimated.length>0 && (
         <div style={{ background:"#FFF9F0", border:"1px solid #FFE8CC", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#E67700", marginBottom:6 }}>Tap to update variable bills:</div>
@@ -591,14 +620,21 @@ function CalendarView({ allBills, year, month, onUpdateVariable, onEditCategory,
           ● Auto-updated: {Object.entries(sheetData).filter(([,v])=>v.amount).map(([k,v])=>`${k} ${fmt(v.amount)}`).join(" · ")}
         </div>
       )}
-      {isDesktop && selectedDay && selectedBills.length>0 ? (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:14, alignItems:"start" }}>
-          <div>{grid}</div>
-          <div style={{ position:"sticky", top:14 }}>{detail}</div>
-        </div>
-      ) : (
-        <div>{grid}{selectedDay&&selectedBills.length>0&&<div style={{ marginTop:10 }}>{detail}</div>}</div>
+
+      <div style={{ position:"relative" }}>
+        {grid}
+        {isDesktop && selectedDay && selectedBills.length > 0 && (
+          <div style={{ position:"absolute", top:0, right:-316, width:300 }}>
+            {detail}
+          </div>
+        )}
+      </div>
+
+      {!isDesktop && selectedDay && selectedBills.length > 0 && (
+        <div style={{ marginTop:10 }}>{detail}</div>
       )}
+
+      <SummaryFooter allBills={allBills} />
     </div>
   );
 }
@@ -699,6 +735,7 @@ function ListView({ allBills, year, month, onUpdateVariable, onEditCategory, she
           )}
         </div>
       )}
+      <SummaryFooter allBills={allBills} />
     </div>
   );
 }
@@ -714,6 +751,7 @@ export default function App() {
   const [variableAmounts, setVariableAmounts] = useState({});
   const [fixedOverrides, setFixedOverrides] = useState({});
   const [categoryOverrides, setCategoryOverrides] = useState({});
+  const [nameOverrides, setNameOverrides] = useState({});
   const [extraBills, setExtraBills] = useState([]);
   const [overridesLoaded, setOverridesLoaded] = useState(false);
 
@@ -734,6 +772,7 @@ export default function App() {
     fetchOverrides().then(overrides => {
       if (overrides.fixedOverrides) setFixedOverrides(overrides.fixedOverrides);
       if (overrides.categoryOverrides) setCategoryOverrides(overrides.categoryOverrides);
+      if (overrides.nameOverrides) setNameOverrides(overrides.nameOverrides);
       if (overrides.extraBills) setExtraBills(overrides.extraBills);
       if (overrides.variableAmounts) setVariableAmounts(overrides.variableAmounts);
       setOverridesLoaded(true);
@@ -743,30 +782,43 @@ export default function App() {
   // Fallback: also save to localStorage
   useEffect(() => {
     if (!overridesLoaded) return;
-    const data = { variableAmounts, fixedOverrides, categoryOverrides, extraBills };
+    const data = { variableAmounts, fixedOverrides, categoryOverrides, nameOverrides, extraBills };
     try { localStorage.setItem("predictabill_v2", JSON.stringify(data)); } catch(e) {}
     saveOverride("all", data);
-  }, [variableAmounts, fixedOverrides, categoryOverrides, extraBills, overridesLoaded]);
+  }, [variableAmounts, fixedOverrides, categoryOverrides, nameOverrides, extraBills, overridesLoaded]);
 
   const allBills = useMemo(() => {
     const fixed = FIXED_BILLS.map(b => ({
       ...b, variable:false,
       amount: fixedOverrides[b.id]??b.amount,
       category: categoryOverrides[b.id]??b.category,
+      name: nameOverrides[b.id]??b.name,
       baseCategory: b.category,
     }));
     const variable = VARIABLE_BILLS.map(b => {
       const sheetAmount = sheetData[b.name]?.amount;
       const manualAmount = variableAmounts[`${monthKey}-${b.id}`];
-      return { ...b, variable:true, amount:manualAmount||sheetAmount||0, category:categoryOverrides[b.id]??b.category, baseCategory:b.category };
+      return { ...b, variable:true, amount:manualAmount||sheetAmount||0, category:categoryOverrides[b.id]??b.category, name:nameOverrides[b.id]??b.name, baseCategory:b.category };
     });
     const extra = extraBills.filter(b=>b.recurring||b.monthKey===monthKey).map(b=>({...b,variable:false}));
     return [...fixed,...variable,...extra];
   }, [variableAmounts,fixedOverrides,categoryOverrides,extraBills,monthKey,sheetData]);
 
-  function saveAmount(bill, amount) {
-    if (!bill.variable) { setFixedOverrides(f=>({...f,[bill.id]:amount})); }
-    else { setVariableAmounts(v=>({...v,[`${monthKey}-${bill.id}`]:amount})); }
+  function saveAmount(bill, payload) {
+    const amount = typeof payload === "number" ? payload : payload.amount;
+    const newName = payload.name;
+    const newCategory = payload.category;
+    if (!bill.variable) {
+      setFixedOverrides(f => ({ ...f, [bill.id]: amount }));
+    } else {
+      setVariableAmounts(v => ({ ...v, [`${monthKey}-${bill.id}`]: amount }));
+    }
+    if (newName && newName !== bill.name) {
+      setNameOverrides(n => ({ ...n, [bill.id]: newName }));
+    }
+    if (newCategory && newCategory !== bill.category) {
+      setCategoryOverrides(c => ({ ...c, [bill.id]: newCategory }));
+    }
     setUpdatingBill(null);
   }
   function saveCategory(bill, newCat) {
@@ -787,8 +839,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:"#F2F4F8", fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      {updatingBill && <UpdateModal bill={updatingBill} onSave={amt=>saveAmount(updatingBill,amt)} onClose={()=>setUpdatingBill(null)} />}
-      {editingCategory && <EditCategoryModal bill={editingCategory} onSave={cat=>saveCategory(editingCategory,cat)} onClose={()=>setEditingCategory(null)} />}
+      {updatingBill && <UpdateModal bill={updatingBill} onSave={payload=>saveAmount(updatingBill,payload)} onClose={()=>setUpdatingBill(null)} />}
       {showAddModal && <AddBillModal onSave={addExtraBill} onClose={()=>setShowAddModal(false)} />}
 
       {/* Logo bar */}
@@ -809,24 +860,26 @@ export default function App() {
         <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.3px", minWidth:160, textAlign:"center" }}>{MONTHS[month]} {year}</div>
         <button onClick={nextMonth} style={{ background:"none", border:"1px solid #ddd", borderRadius:6, padding:"5px 12px", cursor:"pointer", fontSize:14 }}>→</button>
         {!onCurrentMonth && (
-          <button onClick={goToday} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#3B5BDB", fontWeight:700, padding:"4px 6px", textDecoration:"underline" }}>
+          <button onClick={goToday} style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#888", fontWeight:400, padding:"4px 6px", textDecoration:"underline" }}>
             Back to today
           </button>
         )}
       </div>
 
       {/* Action bar */}
-      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
-        <div style={{ display:"flex", background:"#f0f0f0", borderRadius:8, padding:3, gap:2 }}>
-          {[["calendar","Calendar"],["list","List"]].map(([id,label]) => (
-            <button key={id} onClick={() => setView(id)} style={{ padding:"7px 16px", borderRadius:6, border:"none", background:view===id?"#fff":"transparent", fontWeight:view===id?700:500, fontSize:13, cursor:"pointer", color:view===id?"#3B5BDB":"#666", boxShadow:view===id?"0 1px 4px rgba(0,0,0,0.1)":"none" }}>{label}</button>
-          ))}
+      <div style={{ background:"#fff", borderBottom:"1px solid #e8e8e8", padding:"8px 14px" }}>
+        <div style={{ maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ display:"flex", background:"#f0f0f0", borderRadius:8, padding:3, gap:2 }}>
+            {[["calendar","Calendar"],["list","List"]].map(([id,label]) => (
+              <button key={id} onClick={() => setView(id)} style={{ padding:"7px 16px", borderRadius:6, border:"none", background:view===id?"#fff":"transparent", fontWeight:view===id?700:500, fontSize:13, cursor:"pointer", color:view===id?"#3B5BDB":"#666", boxShadow:view===id?"0 1px 4px rgba(0,0,0,0.1)":"none" }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ flex:1 }} />
+          <button onClick={() => setShowAddModal(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontWeight:700, fontSize:13, cursor:"pointer" }}>+ Add</button>
+          <button onClick={() => setPrintMode(view==="calendar"?"calendar":"list")} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"7px 12px", fontWeight:700, fontSize:13, cursor:"pointer", color:"#333", display:"flex", alignItems:"center", gap:5 }}>
+            <span>🖨</span><span style={{ fontSize:12 }}>Print</span>
+          </button>
         </div>
-        <div style={{ flex:1 }} />
-        <button onClick={() => setShowAddModal(true)} style={{ background:"#3B5BDB", color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontWeight:700, fontSize:13, cursor:"pointer" }}>+ Add</button>
-        <button onClick={() => setPrintMode(view==="calendar"?"calendar":"list")} style={{ background:"#f0f0f0", border:"none", borderRadius:8, padding:"7px 12px", fontWeight:700, fontSize:13, cursor:"pointer", color:"#333", display:"flex", alignItems:"center", gap:5 }}>
-          <span>🖨</span><span style={{ fontSize:12 }}>Print</span>
-        </button>
       </div>
 
       <div style={{ maxWidth:960, margin:"0 auto", padding:"14px 12px" }}>
